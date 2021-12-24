@@ -7,12 +7,6 @@ from datetime import datetime, timedelta
 
 yf.pdr_override()
 
-# 거래소별 전체 종목코드: KRX (KOSPI, KODAQ, KONEX), NASDAQ, NYSE, AMEX, S&P 500
-
-#df_krx = fdr.StockListing('KRX')
-#print(df_krx.head())
-
-
 def parse():
     parser = argparse.ArgumentParser(description="Hal-To Quant")
     parser.add_argument('--strategy', '-s', type=str, help='Strategy')
@@ -26,8 +20,8 @@ def parse():
 def profit(ticker, date, dayOffset):
     e = date
     if type(e) == str:
-        e = datetime.datetime.strptime(e, '%Y-%m-%d')
-    b = e + datetime.timedelta(days=-dayOffset)
+        e = datetime.strptime(e, '%Y-%m-%d')
+    b = e + timedelta(days=-dayOffset)
     spy = fdr.DataReader(ticker, b, e)
     f = spy.head(1).iloc[0]['Close']
     r = spy.tail(1).iloc[0]['Close']
@@ -53,27 +47,45 @@ def dual_momentum_original(date):
     print("Asset to buy: %s 100%%" % ticker)
 
 
+def select_dmo(x):
+    asset = pd.Series([0,0], index=['ASSET', 'PRICE'])
+    if x['SPY_YoY'] > x['BIL_YoY']:
+        asset['ASSET'] = 'SPY' if x['SPY_YoY'] > x['EFA_YoY'] else 'EFA'
+        asset['PRICE'] = x[asset['ASSET']]
+    return asset
+
+
 def dual_momentum_original_backtest(begin, end):
-    spy = pdr.get_data_yahoo('SPY', start=begin, end=end)['Close']
-    efa = pdr.get_data_yahoo('EFA', start=begin, end=end)['Close']
-    bil = pdr.get_data_yahoo('BIL', start=begin, end=end)['Close']
+    begin = begin + timedelta(days=-365)
+    spy = pdr.get_data_yahoo('SPY', start=begin, end=end, progress=False)['Adj Close']
+    efa = pdr.get_data_yahoo('EFA', start=begin, end=end, progress=False)['Adj Close']
+    bil = pdr.get_data_yahoo('BIL', start=begin, end=end, progress=False)['Adj Close']
     dmo = pd.concat([spy, efa, bil], axis=1).dropna()
     dmo.columns = ['SPY', 'EFA', 'BIL']
-    dmo = dmo.resample(rule='M').apply(lambda x: x[-1])
 
+    # Takes only last day of each month
+    dmo = dmo.resample(rule='M').apply(lambda x: x[-1])
+    dmo_after = dmo.shift(periods=-12, axis=0)
     
-    print(dmo.head())
+    # YoY
+    dmo_yoy = dmo_after / dmo - 1.
+    dmo_yoy = dmo_yoy.shift(periods=12, axis=0).dropna()
+    dmo[['SPY_YoY', 'EFA_YoY', 'BIL_YoY']] = dmo_yoy
+    dmo[['ASSET', 'PRICE']] = dmo.apply(lambda x: select_dmo(x), axis=1)
+    
 
 def main():
     args = parse()
-    if args.strategy == 'dmo':     
-        date = args.date if args.date is not None else datetime.now()
-        
+    if args.strategy == 'dmo':
         if args.backtest:
-            dual_momentum_original_backtest(args.begin, args.end)
+            b = datetime.strptime(args.begin, '%Y%m%d')
+            e = datetime.strptime(args.end, '%Y%m%d')
+            dual_momentum_original_backtest(b, e)
         else:
             if args.date is None:
                 date = datetime.now()
+            else:
+                date = args.date
             dual_momentum_original(date)
     else:
         print('Strategy not supported: %s' % args.strategy)
