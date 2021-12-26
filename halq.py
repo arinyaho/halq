@@ -99,11 +99,6 @@ def dual_momentum_original_backtest(begin, end):
 
     dmo.to_csv('test.csv')
 
-    
-            
-
-
-
 def main():
     args = parse()
     if args.strategy == 'dmo':
