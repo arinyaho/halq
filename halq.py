@@ -1,9 +1,16 @@
 import FinanceDataReader as fdr
 import pandas as pd
-from pandas_datareader import data as pdr
 import yfinance as yf
+from pandas_datareader import data as pdr
+from fredapi import Fred
+
+
 import argparse
+import os
+import sys
 from datetime import datetime, timedelta
+
+
 
 yf.pdr_override()
 
@@ -14,6 +21,7 @@ def parse():
     parser.add_argument('--backtest', action='store_true', help='Backtest')
     parser.add_argument('--begin', type=str, help='Backtest begin')
     parser.add_argument('--end', type=str, help='Backtest end')
+    parser.add_argument('--list', action='store_true', help='List strategies')
     return parser.parse_args()
 
 
@@ -28,13 +36,44 @@ def profit(ticker, date, dayOffset):
     r = spy.tail(1).iloc[0]['Close']
     return r/f - 1.
 
+def laa(date):
+    # 200 days moving average of S&P500 index
+    begin = date + timedelta(days=-365)
+    spy = pdr.get_data_yahoo('^GSPC', start=begin, end=date, progress=False)['Adj Close']
+    spy_ma200 = spy.rolling(window=200).mean()
+
+    if not os.path.exists('fred.api'):
+        print('FRED API Key file not found: fred.api')
+        sys.exit(1)
+
+    with open('fred.api', 'r') as fin:
+        apikey = fin.read()
+    
+    fred = Fred(api_key=apikey)
+    unrate = fred.get_series('UNRATE').tail(15)
+    unrate_ma12m = unrate.rolling(window=12).mean()
+
+    choose_shy = spy[-2] < spy_ma200[-2] and unrate[-1] > unrate_ma12m[-1]
+    choice = 'SHY' if choose_shy else 'QQQ'
+
+    print("LAA")
+    print("  Monthly Rebalancing: QQQ or SHY")
+    print("  Yearly Rebalancing: GLD, IWD, IEF, (QQQ or SHY)")
+    print("Indicators (%s)" % date)
+    print("  S&P500,       MA200: %.2f, %.2f" % (spy[-2], spy_ma200[-2]))
+    print("  Unemployment, MA12m: %.2f, %.2f" % (unrate[-1], unrate_ma12m[-1]))
+    print("Asset to buy:")
+    print("  GLD: 25%")
+    print("  IWD: 25%")
+    print("  IEF: 25%")
+    print("  %s: 25%%" % choice)
+
 
 def dual_momentum_original(date):
     spy = profit('SPY', date, 365)
     efa = profit('EFA', date, 365)
     bil = profit('BIL', date, 365)
     agg = profit('AGG', date, 365)
-
 
     print("Original Dual Momentum: Monthly Rebalancing")
     print("Yearly Profit (%s)" % date)
@@ -94,6 +133,7 @@ def dual_momentum_original_backtest(begin, end):
             dmo.loc[dmo.index[i], 'Profit'] = profit
             dmo.loc[dmo.index[i], 'Profit_acc'] = profit_acc_before * (1 + profit)
     
+    ## TODO: MDD
     print(dmo.head(10))
     print(dmo.tail(10))
 
@@ -101,18 +141,22 @@ def dual_momentum_original_backtest(begin, end):
 
 def main():
     args = parse()
-    if args.strategy == 'dmo':
+    
+    fundic = {
+        ('dmo', False): dual_momentum_original,
+        ('dmo', True): dual_momentum_original_backtest,
+        ('laa', False): laa
+    }
+
+    try:
         if args.backtest:
             b = datetime.strptime(args.begin, '%Y%m%d')
             e = datetime.strptime(args.end, '%Y%m%d')
-            dual_momentum_original_backtest(b, e)
+            fundic[(args.strategy.lower(), True)](b, e)
         else:
-            if args.date is None:
-                date = datetime.now()
-            else:
-                date = args.date
-            dual_momentum_original(date)
-    else:
+            date = datetime.now() if args.date is None else args.date
+            fundic[(args.strategy.lower(), False)](date)
+    except KeyError:
         print('Strategy not supported: %s' % args.strategy)
 
 if __name__ == '__main__':

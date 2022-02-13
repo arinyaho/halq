@@ -10,8 +10,8 @@ yf.pdr_override()
 
 
 def main():
-    if len(sys.argv) != 2:
-        print('Usage: port.py [yml file]')
+    if len(sys.argv) != 2 and len(sys.argv) != 3:
+        print('Usage: port.py [yml file] <yyyy-mm-dd>')
         sys.exit(1)
 
     f = sys.argv[1]
@@ -24,11 +24,15 @@ def main():
     prices = {}
     ssum = {}
     strats = port['portfolio']['strategies']
-    today = datetime.today()
+    if len(sys.argv) == 3:
+        today = datetime.strptime(sys.argv[2], '%Y-%m-%d')
+    else:
+        today = datetime.today()
+    print('Date: %s' % datetime.strftime(today, '%Y-%m-%d'))
     for sname, sport in strats.items():
         if sname not in ssum:
             ssum[sname] = 0
-        print(sname, sport)
+        # print(sname, sport)
         for ticker, count in sport.items():
             if ticker not in prices:
                 data = pdr.get_data_yahoo(ticker, start=today, end=today, progress=False)['Close']
@@ -40,10 +44,13 @@ def main():
             ssum[sname] += value
     total = sum(list(ssum.values()))
 
+    for sname, stotal in ssum.items():
+        print('%20s: $%.3f' % (sname, stotal))
+
     sportion = {}
     for sname in strats:
         sportion[sname] = 100. * ssum[sname] / total
-    print(sportion)
+    # print(sportion)
 
     val = list(sportion.values())
     label = list(sportion.keys())
