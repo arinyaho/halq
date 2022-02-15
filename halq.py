@@ -8,6 +8,7 @@ from fredapi import Fred
 import argparse
 import os
 import sys
+import math
 from datetime import datetime, timedelta
 
 
@@ -133,11 +134,14 @@ def dual_momentum_original_backtest(begin, end):
             dmo.loc[dmo.index[i], 'Profit'] = profit
             dmo.loc[dmo.index[i], 'Profit_acc'] = profit_acc_before * (1 + profit)
     
-    ## TODO: MDD
-    print(dmo.head(10))
-    print(dmo.tail(10))
-
+    ## MDD
+    dmo['dd'] = (dmo['Profit_acc'].cummax() - dmo['Profit_acc']) / dmo['Profit_acc'].cummax()
     dmo.to_csv('test.csv')
+    print(len(dmo))
+    print('Start: %s' % dmo.index[0].strftime('%Y-%m-%d'))
+    print('End  : %s' % dmo.index[-1].strftime('%Y-%m-%d'))
+    print('APR: %.3f' % (dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1))
+    print('MDD: %.3f' % dmo['dd'].max())
 
 def main():
     args = parse()
