@@ -23,6 +23,7 @@ def main():
             exit(2)
     prices = {}
     ssum = {}
+    sprice = {}
     strats = port['portfolio']['strategies']
     if len(sys.argv) == 3:
         today = datetime.strptime(sys.argv[2], '%Y-%m-%d')
@@ -32,6 +33,7 @@ def main():
     for sname, sport in strats.items():
         if sname not in ssum:
             ssum[sname] = 0
+            sprice[sname] = {}
         # print(sname, sport)
         for ticker, count in sport.items():
             if ticker not in prices:
@@ -39,17 +41,21 @@ def main():
                 price = data.iloc[0]
                 prices[ticker] = price
             else:
-                price = prices[ticker]
+                price = prices[ticker]            
             value = price * count
+            sprice[sname][ticker] = value
             ssum[sname] += value
     total = sum(list(ssum.values()))
 
     for sname, stotal in ssum.items():
-        print('%20s: $%.3f' % (sname, stotal))
+        print('%20s: $%.2f(%.1f%%)' % (sname, stotal, 100 * stotal / total))
+        for ticker, value in sprice[sname].items():
+            if value != 0:
+                print('%28s: %.2f(%.1f%%)' % (ticker, value, 100 * value / stotal))
 
     sportion = {}
     for sname in strats:
-        sportion[sname] = 100. * ssum[sname] / total
+        sportion[sname] = 100. * ssum[sname] / total        
     # print(sportion)
 
     val = list(sportion.values())
