@@ -2,6 +2,7 @@ import FinanceDataReader as fdr
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr
+import matplotlib.pyplot as plt
 from fredapi import Fred
 
 
@@ -133,15 +134,24 @@ def dual_momentum_original_backtest(begin, end):
             profit = dmo.iloc[i][asset_before] / dmo.iloc[i-1][asset_before] - 1.
             dmo.loc[dmo.index[i], 'Profit'] = profit
             dmo.loc[dmo.index[i], 'Profit_acc'] = profit_acc_before * (1 + profit)
-    
+        
     ## MDD
-    dmo['dd'] = (dmo['Profit_acc'].cummax() - dmo['Profit_acc']) / dmo['Profit_acc'].cummax()
+    dmo['dd'] = -1 * (dmo['Profit_acc'].cummax() - dmo['Profit_acc']) / dmo['Profit_acc'].cummax()
     dmo.to_csv('test.csv')
     print(len(dmo))
     print('Start: %s' % dmo.index[0].strftime('%Y-%m-%d'))
     print('End  : %s' % dmo.index[-1].strftime('%Y-%m-%d'))
-    print('APR: %.3f' % (dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1))
-    print('MDD: %.3f' % dmo['dd'].max())
+    print('APR: %.3f' % (((dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1)) * 100))
+    print('MDD: %.3f' % (dmo['dd'].min() * 100))
+
+    capr = plt.figure(1)
+    capr.suptitle("CAPR")    
+    dmo['Profit_acc'].plot.line()
+
+    mdd = plt.figure(2)
+    mdd.suptitle("MDD")
+    (dmo['dd'] * 100).plot.line(color='red')
+    plt.show()
 
 def main():
     args = parse()
