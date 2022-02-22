@@ -111,61 +111,66 @@ def laa_backtest(begin, end, rebalance_month=1):
     laa = laa.merge(une_ma12m, how='outer', left_index=True, right_index=True)
     laa['UNRATE_MA12M'] = laa['UNRATE_MA12M'].fillna(method='ffill')
     
-    laa = laa.dropna()
+    laa = laa.dropna().resample('BMS').first()
 
-    print(laa.tail(10))
-    print(une.tail(10))
-    '''
     laa['Choice'] = laa.apply(lambda x: select_laa(x), axis=1)    
-    laa['Profit'] = 0
     laa[['GLD_HOLD', 'IWD_HOLD', 'IEF_HOLD']] = 0.25
     laa[['QQQ_HOLD', 'SHY_HOLD']] = 0
     if laa.iloc[0]['Choice'] == 'QQQ':
         laa.loc[laa.index[0], ['QQQ_HOLD']] = 0.25
     else:
         laa.loc[laa.index[0], ['SHY_HOLD']] = 0.25
+
     for i in range(1, len(laa)):
         laa.loc[laa.index[i], 'GLD_HOLD'] = laa.iloc[i-1]['GLD_HOLD'] * laa.iloc[i]['GLD'] / laa.iloc[i-1]['GLD']
         laa.loc[laa.index[i], 'IWD_HOLD'] = laa.iloc[i-1]['IWD_HOLD'] * laa.iloc[i]['IWD'] / laa.iloc[i-1]['IWD']
         laa.loc[laa.index[i], 'IEF_HOLD'] = laa.iloc[i-1]['IEF_HOLD'] * laa.iloc[i]['IEF'] / laa.iloc[i-1]['IEF']
-        if laa.iloc[i-1]['QQQ_HOLD'] != 0:
-            laa.loc[laa.index[i], 'QQQ_HOLD'] = laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ'] / laa.iloc[i-1]['QQQ']
+        laa.loc[laa.index[i], 'QQQ_HOLD'] = laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ'] / laa.iloc[i-1]['QQQ']
+        laa.loc[laa.index[i], 'SHY_HOLD'] = laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY'] / laa.iloc[i-1]['SHY']
+        
+        if laa.iloc[i-1]['Choice'] == 'QQQ':
+            if laa.iloc[i]['Choice'] == 'SHY':
+                val = laa.iloc[i]['QQQ_HOLD'] * laa.iloc[i]['QQQ']
+                laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
+                laa.loc[laa.index[i], 'SHY_HOLD'] = val / laa.iloc[i]['SHY']
         else:
-            laa.loc[laa.index[i], 'SHY_HOLD'] = laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY'] / laa.iloc[i-1]['SHY']
+            if laa.iloc[i]['Choice'] == 'QQQ':
+                val = laa.iloc[i]['SHY_HOLD'] * laa.iloc[i]['SHY']        
+                laa.loc[laa.index[i], 'SHY_HOLD'] = 0
+                laa.loc[laa.index[i], 'QQQ_HOLD'] = val / laa.iloc[i]['QQQ']
+            
+            
         # Yearly rebalancing
-        if i >= 12 and laa.index[i].month == rebalance_month:
+        if i > 12 and laa.index[i].month == rebalance_month:
             sum = laa.loc[laa.index[i], 'GLD_HOLD'] + laa.loc[laa.index[i], 'IWD_HOLD'] + laa.loc[laa.index[i], 'IEF_HOLD'] + laa.loc[laa.index[i], 'QQQ_HOLD'] + laa.loc[laa.index[i], 'SHY_HOLD']
             laa.loc[laa.index[i], 'GLD_HOLD'] = sum / 4
             laa.loc[laa.index[i], 'IWD_HOLD'] = sum / 4
             laa.loc[laa.index[i], 'IEF_HOLD'] = sum / 4
+            laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
+            laa.loc[laa.index[i], 'SHY_HOLD'] = 0
             if laa.iloc[i]['Choice'] == 'QQQ':
                 laa.loc[laa.index[i], 'QQQ_HOLD'] = sum / 4
             else:
                 laa.loc[laa.index[i], 'SHY_HOLD'] = sum / 4
-        # Monthly Rebalancing
-        else:
-            if laa.iloc[i]['Choice'] == 'QQQ' and laa.iloc[i-1]['QQQ_HOLD'] == 0:
-                val = laa.iloc[i]['QQQ_HOLD'] * laa.ilo[i]['QQQ']
-                laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
-                laa.loc[laa.index[i], 'SHY_HOLD'] = val / laa.iloc[i]['SHY']
-            elif laa.iloc[i]['Choice'] == 'SHY' and laa.iloc[i-1]['SHY_HOLD'] == 0:
-                val = laa.iloc[i]['SHY_HOLD'] * laa.iloc[i]['SHY']
-                laa.loc[laa.index[i], 'SHY_HOLD'] = 0
-                laa.loc[laa.index[i], 'GLD_HOLD'] = val / laa.iloc[i]['GLD']
-    '''
 
-    '''
-    for i in range(len(laa)):
-        profit = 0
-        if i != 0:
-            asset_before = laa.iloc[i-1]['Asset']
-            profit_acc_before = laa.iloc[i-1]['Profit_acc']
-            profit = laa.iloc[i][asset_before] / laa.iloc[i-1][asset_before] - 1.
-            laa.loc[laa.index[i], 'Profit'] = profit
-            laa.loc[laa.index[i], 'Profit_acc'] = profit_acc_before * (1 + profit)
-    '''
-    print(laa.head(10))
-    print(laa.tail(10))
+    ## MDD
+    laa['Profit'] = laa['GLD_HOLD'] + laa['IWD_HOLD'] + laa['IEF_HOLD'] + laa['QQQ_HOLD'] + laa['SHY_HOLD']
+    laa['dd'] = -1 * (laa['Profit'].cummax() - laa['Profit']) / laa['Profit'].cummax()    
+    print('Start: %s' % laa.index[0].strftime('%Y-%m-%d'))
+    print('End  : %s' % laa.index[-1].strftime('%Y-%m-%d'))
+    print('CAPR: %.3f' % (((laa['Profit'][-1] ** (1. / (len(laa) / 12)) - 1)) * 100))
+    print('MDD: %.3f' % (laa['dd'].min() * 100))
+
+    capr = plt.figure(1)
+    capr.suptitle("LAA Growth")    
+    laa['Profit'].plot.line()
+
+    mdd = plt.figure(2)
+    mdd.suptitle("LAA MDD")
+    (laa['dd'] * 100).plot.line(color='red')
+    plt.show()
+
+    laa.to_excel('laa_backtest.xlsx')
 
 
 def dual_momentum_original(date):
@@ -234,20 +239,21 @@ def dual_momentum_original_backtest(begin, end, rebalance_month=1):
         
     ## MDD
     dmo['dd'] = -1 * (dmo['Profit_acc'].cummax() - dmo['Profit_acc']) / dmo['Profit_acc'].cummax()
-    dmo.to_csv('test.csv')
-    print(len(dmo))
     print('Start: %s' % dmo.index[0].strftime('%Y-%m-%d'))
     print('End  : %s' % dmo.index[-1].strftime('%Y-%m-%d'))
-    print('APR: %.3f' % (((dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1)) * 100))
+    print('CAPR: %.3f' % (((dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1)) * 100))
     print('MDD: %.3f' % (dmo['dd'].min() * 100))
 
+    dmo.to_excel('dmo_backtest.xlsx')
+
     capr = plt.figure(1)
-    capr.suptitle("CAPR")    
+    capr.suptitle("Original Dual Momentum Growth")    
     dmo['Profit_acc'].plot.line()
 
     mdd = plt.figure(2)
-    mdd.suptitle("MDD")
+    mdd.suptitle("Original Dual Momentum MDD")
     (dmo['dd'] * 100).plot.line(color='red')
+
     plt.show()
 
 def main():
@@ -260,17 +266,17 @@ def main():
         ('laa', True): laa_backtest
     }
 
-    try:
-        if args.backtest:
-            b = datetime.strptime(args.begin, '%Y%m%d')
-            e = datetime.strptime(args.end, '%Y%m%d')
-            fundic[(args.strategy.lower(), True)](b, e, args.rebalance_month)
-        else:
-            date = datetime.now() if args.date is None else args.date
-            fundic[(args.strategy.lower(), False)](date)
-    except KeyError as ex:
+    if (args.strategy.lower(), True) not in fundic:
         print('Strategy not supported: %s' % args.strategy)
-        print(ex)
+        sys.exit(1)
+
+    if args.backtest:
+        b = datetime.strptime(args.begin, '%Y%m%d')
+        e = datetime.strptime(args.end, '%Y%m%d')            
+        fundic[(args.strategy.lower(), True)](b, e, args.rebalance_month)
+    else:
+        date = datetime.now() if args.date is None else args.date
+        fundic[(args.strategy.lower(), False)](date)
 
 if __name__ == '__main__':
     main()
