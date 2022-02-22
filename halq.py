@@ -19,10 +19,10 @@ yf.pdr_override()
 def parse():
     parser = argparse.ArgumentParser(description="Hal-To Quant")
     parser.add_argument('--strategy', '-s', type=str, help='Strategy')
-    parser.add_argument('--date', '-d', type=str, help='Rebalancing base date')
+    parser.add_argument('--date', '-d', type=str, help='Rebalancing base date in YYYYMMDD format')
     parser.add_argument('--backtest', action='store_true', help='Backtest')
-    parser.add_argument('--begin', type=str, help='Backtest begin')
-    parser.add_argument('--end', type=str, help='Backtest end')
+    parser.add_argument('--begin', type=str, help='Backtest begin date in YYYYMMDD format')
+    parser.add_argument('--end', type=str, help='Backtest end date in YYYYMMDD format')
     parser.add_argument('--rebalance-month', type=int, default=1, choices=range(1, 13), help='Month for rebalancing asset allocation')
     parser.add_argument('--list', action='store_true', help='List strategies')
     return parser.parse_args()
@@ -256,6 +256,13 @@ def dual_momentum_original_backtest(begin, end, rebalance_month=1):
 
     plt.show()
 
+
+def list_strategies():
+    print('List of Strategies')
+    print('  laa       Lethargic Asset Allocation')
+    print('  dmo       Original Dual Momentum')
+
+
 def main():
     args = parse()
     
@@ -265,6 +272,11 @@ def main():
         ('laa', False): laa,
         ('laa', True): laa_backtest
     }
+
+    if (args.list):
+        list_strategies()
+        sys.exit(0)
+
 
     if (args.strategy.lower(), True) not in fundic:
         print('Strategy not supported: %s' % args.strategy)
