@@ -1,18 +1,16 @@
 import FinanceDataReader as fdr
+import dart_fss as dart
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
 from fredapi import Fred
 
-
 import argparse
 import os
 import sys
 import math
 from datetime import datetime, timedelta
-
-
 
 yf.pdr_override()
 
@@ -39,6 +37,62 @@ def profit(ticker, date, dayOffset):
     r = spy.tail(1).iloc[0]['Close']
     return r/f - 1.
 
+def vaa_a_momentum(data):
+    ds20  = (data / data.shift(20)  - 1) * 12
+    ds60  = (data / data.shift(60)  - 1) * 4
+    ds120 = (data / data.shift(120) - 1) * 2
+    ds240 = (data / data.shift(240) - 1)
+    m = ds20 + ds60 + ds120 + ds240
+    
+    return m
+
+def vaa_a(date):    
+    assets_a = ['SPY', 'EFA', 'EEM', 'AGG']     # Aggresive
+    assets_d = ['LQD', 'IEF', 'SHY']            # Defensive    
+
+    a, amax = vaa_a_calculate(assets_a, date)
+    d, dmax = vaa_a_calculate(assets_d, date)
+
+    a.to_excel('a.xlsx')
+    
+    # Check momentum score
+    aggresive = True
+    for ticker in assets_a:
+        aggresive = aggresive and a.iloc[-1][ticker + '_M'] >= 0
+    
+    print("LAA")
+    print("Momentum score for aggresive assets")
+    for ticker in assets_a:
+        print(f"    {ticker}: {a.iloc[-1][ticker + '_M']:.3f}")
+    print("Momentum score for defensive assets")
+    for ticker in assets_d:
+        print(f"    {ticker}: {d.iloc[-1][ticker + '_M']:.3f}")
+    print("Asset choice: " + (amax if aggresive else dmax))
+    
+
+def vaa_a_calculate(tickers, date):
+    data = []
+    momentum = []
+    begin = date + timedelta(days=-400)
+    for ticker in tickers:
+        d = pdr.get_data_yahoo(ticker, start=begin, end=date, progress=False)['Adj Close']
+        data.append(d)
+        m = vaa_a_momentum(d)
+        momentum.append(m)
+
+    a = pd.concat(data + momentum, axis=1)
+    a.columns = tickers + [s + '_M' for s in tickers]
+
+    max_ticker = ''
+    max_value = float('-inf')
+    for ticker in tickers:
+        if a.iloc[-1][ticker + '_M'] > max_value:
+            max_ticker = ticker
+            max_value = a.iloc[-1][ticker + '_M']
+
+    return a, max_ticker
+
+
 def laa(date):
     # 200 days moving average of S&P500 index
     begin = date + timedelta(days=-365)
@@ -56,20 +110,21 @@ def laa(date):
     unrate = fred.get_series('UNRATE').tail(15)
     unrate_ma12m = unrate.rolling(window=12).mean()
 
-    choose_shy = spy[-2] < spy_ma200[-2] and unrate[-1] > unrate_ma12m[-1]
+    choose_shy = spy[-1] < spy_ma200[-1] and unrate[-1] > unrate_ma12m[-1]
     choice = 'SHY' if choose_shy else 'QQQ'
 
     print("LAA")
     print("  Monthly Rebalancing: QQQ or SHY")
     print("  Yearly Rebalancing: GLD, IWD, IEF, (QQQ or SHY)")
     print("Indicators (%s)" % date)
-    print("  S&P500,       MA200: %.2f, %.2f" % (spy[-2], spy_ma200[-2]))
+    print("  S&P500,       MA200: %.2f, %.2f" % (spy[-1], spy_ma200[-1]))
     print("  Unemployment, MA12m: %.2f, %.2f" % (unrate[-1], unrate_ma12m[-1]))
     print("Asset to buy:")
     print("  GLD: 25%")
     print("  IWD: 25%")
     print("  IEF: 25%")
     print("  %s: 25%%" % choice)
+
 
 def select_laa(x):
     choice = pd.Series([0], index=['Choice'])
@@ -256,21 +311,38 @@ def dual_momentum_original_backtest(begin, end, rebalance_month=1):
 
     plt.show()
 
+def hq_ultra():
+    if not os.path.exists('dart.api'):
+        print('DART API Key file not found: dart.api')
+        sys.exit(1)
+
+    with open('dart.api', 'r') as fin:
+        apikey = fin.read()
+    
+    print(apikey)
+    dart.set_api_key(api_key=apikey)
+    clist = dart.get_corp_list()
+    print(clist)
 
 def list_strategies():
     print('List of Strategies')
     print('  laa       Lethargic Asset Allocation')
+    print('  vaa-a     Vigilant Asset Allocation Aggresive')
     print('  dmo       Original Dual Momentum')
 
 
 def main():
+    # hq_ultra()
+    # sys.exit(2)
+
     args = parse()
     
     fundic = {
         ('dmo', False): dual_momentum_original,
         ('dmo', True): dual_momentum_original_backtest,
         ('laa', False): laa,
-        ('laa', True): laa_backtest
+        ('laa', True): laa_backtest,
+        ('vaa-a', False): vaa_a
     }
 
     if (args.list):
@@ -278,7 +350,7 @@ def main():
         sys.exit(0)
 
 
-    if (args.strategy.lower(), True) not in fundic:
+    if (args.strategy.lower(), args.backtest) not in fundic:
         print('Strategy not supported: %s' % args.strategy)
         sys.exit(1)
 
@@ -287,7 +359,7 @@ def main():
         e = datetime.strptime(args.end, '%Y%m%d')            
         fundic[(args.strategy.lower(), True)](b, e, args.rebalance_month)
     else:
-        date = datetime.now() if args.date is None else args.date
+        date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
         fundic[(args.strategy.lower(), False)](date)
 
 if __name__ == '__main__':
