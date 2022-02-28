@@ -6,6 +6,9 @@ from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
 from fredapi import Fred
 
+from vaa_a import VAA_A
+
+import abc
 import argparse
 import os
 import sys
@@ -13,6 +16,22 @@ import math
 from datetime import datetime, timedelta
 
 yf.pdr_override()
+
+'''
+class Quant:
+    def __init__(self, name):
+        self.name = name
+
+    # Print choice for rebalancing and the 
+    @abstractmethod
+    def choice(self, date):
+        pass
+    
+    # Get Pandas DataFrame of backtest data
+    @abstractmethod
+    def backtest(self, begin, end) -> pd.DataFrame:
+        pass
+'''
 
 def parse():
     parser = argparse.ArgumentParser(description="Hal-To Quant")
@@ -50,17 +69,16 @@ def vaa_a(date):
     assets_a = ['SPY', 'EFA', 'EEM', 'AGG']     # Aggresive
     assets_d = ['LQD', 'IEF', 'SHY']            # Defensive    
 
-    a, amax = vaa_a_calculate(assets_a, date)
-    d, dmax = vaa_a_calculate(assets_d, date)
-
-    a.to_excel('a.xlsx')
-    
+    begin = date + timedelta(days=-400)
+    a, amax = vaa_a_calculate(assets_a, begin, date)
+    d, dmax = vaa_a_calculate(assets_d, begin, date)
+  
     # Check momentum score
     aggresive = True
     for ticker in assets_a:
         aggresive = aggresive and a.iloc[-1][ticker + '_M'] >= 0
     
-    print("LAA")
+    print("VAA-Aggresive: Monthly rebalancing")
     print("Momentum score for aggresive assets")
     for ticker in assets_a:
         print(f"    {ticker}: {a.iloc[-1][ticker + '_M']:.3f}")
@@ -68,14 +86,34 @@ def vaa_a(date):
     for ticker in assets_d:
         print(f"    {ticker}: {d.iloc[-1][ticker + '_M']:.3f}")
     print("Asset choice: " + (amax if aggresive else dmax))
-    
 
-def vaa_a_calculate(tickers, date):
+def vaa_select(row):
+    aggresive = True
+    for ticker in assets_a:
+        aggresive = aggresive and row[ticker + '_M'] >= 0
+    pass
+
+def vaa_a_backtest(begin, end):
+    assets_a = ['SPY', 'EFA', 'EEM', 'AGG']     # Aggresive
+    assets_d = ['LQD', 'IEF', 'SHY']            # Defensive    
+
+    begin = date + timedelta(days=-400)
+    a, amax = vaa_a_calculate(assets_a, begin, date)
+    d, dmax = vaa_a_calculate(assets_d, begin, date)
+    vaa = pd.concat([a, d])
+    vaa['Growth'] = 1
+
+    laa['Choice'] = laa.apply(lambda x: select_vaa(x), axis=1)    
+    
+    pass
+
+
+def vaa_a_calculate(tickers, begein, end):
     data = []
     momentum = []
-    begin = date + timedelta(days=-400)
+    
     for ticker in tickers:
-        d = pdr.get_data_yahoo(ticker, start=begin, end=date, progress=False)['Adj Close']
+        d = pdr.get_data_yahoo(ticker, start=begin, end=end, progress=False)['Adj Close']
         data.append(d)
         m = vaa_a_momentum(d)
         momentum.append(m)
@@ -345,22 +383,43 @@ def main():
         ('vaa-a', False): vaa_a
     }
 
+    clsdic = {
+        'vaa-a': VAA_A
+    }
+
     if (args.list):
         list_strategies()
         sys.exit(0)
 
+    sname = args.strategy.lower()
 
-    if (args.strategy.lower(), args.backtest) not in fundic:
+    if (sname, args.backtest) not in fundic and sname not in clsdic:
         print('Strategy not supported: %s' % args.strategy)
         sys.exit(1)
 
-    if args.backtest:
-        b = datetime.strptime(args.begin, '%Y%m%d')
-        e = datetime.strptime(args.end, '%Y%m%d')            
-        fundic[(args.strategy.lower(), True)](b, e, args.rebalance_month)
+    if sname in clsdic:
+        q = clsdic[sname]()
+        if args.backtest:
+            b = datetime.strptime(args.begin, '%Y%m%d')
+            e = datetime.strptime(args.end, '%Y%m%d')            
+            data = q.backtest(b, e, args.rebalance_month)
+            days = (e - b).days
+            growth = data['Growth'][-1]
+            print('Start: %s' % data.index[0].strftime('%Y-%m-%d'))
+            print('End  : %s' % data.index[-1].strftime('%Y-%m-%d'))
+            print('CAPR: %.3f' % (((growth ** (1. / (days / 365)) - 1)) * 100))
+            print('MDD: %.3f' % (data['dd'].min() * 100))
+        else:
+            date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
+            q.rebalance(date)
     else:
-        date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
-        fundic[(args.strategy.lower(), False)](date)
+        if args.backtest:
+            b = datetime.strptime(args.begin, '%Y%m%d')
+            e = datetime.strptime(args.end, '%Y%m%d')            
+            fundic[(args.strategy.lower(), True)](b, e, args.rebalance_month)
+        else:
+            date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
+            fundic[(args.strategy.lower(), False)](date)
 
 if __name__ == '__main__':
     main()
