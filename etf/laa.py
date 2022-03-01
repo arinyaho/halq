@@ -35,9 +35,16 @@ class LAA(QuantETF):
         choice = 'SHY' if choose_shy else 'QQQ'
         
         begin = date + timedelta(days=-35)
+        gld = pdr.get_data_yahoo('GLD', start=begin, end=date, progress=False)['Adj Close']
+        iwd = pdr.get_data_yahoo('IWD', start=begin, end=date, progress=False)['Adj Close']
+        ief = pdr.get_data_yahoo('IEF', start=begin, end=date, progress=False)['Adj Close']
         choice_data = pdr.get_data_yahoo(choice, start=begin, end=date, progress=False)['Adj Close']
-        growth = choice_data.iloc[-1]['Adj Close'] / choice_data[-21]['Adj Close']
-        growth *= 100
+
+        data = pd.concat([gld, iwd, ief, choice_data], axis=1)
+        data.columns = [self.assets[:-2] + [choice]]
+        growth = 0
+        for ticker in data.columns:
+            growth += 0.25 * (data.iloc[-1][ticker] / data.iloc[-20][ticker])
 
         print("LAA")
         print("  Monthly Rebalancing: QQQ or SHY")
@@ -45,12 +52,12 @@ class LAA(QuantETF):
         print("Indicators (%s)" % date)
         print("  S&P500,       MA200: %.2f, %.2f" % (spy[-1], spy_ma200[-1]))
         print("  Unemployment, MA12m: %.2f, %.2f" % (unrate[-1], unrate_ma12m[-1]))
-        print("Asset to buy:")
+        print("Asset Allocation:")
         print("  GLD: 25%")
         print("  IWD: 25%")
         print("  IEF: 25%")
         print("  %s: 25%%" % choice)
-        print(f"1-Month Growth: {grwoth:.3f}")
+        print(f"1-Month Growth: {100 * (growth - 1):.3f}%")
 
 
     @classmethod
