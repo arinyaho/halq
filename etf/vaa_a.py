@@ -1,8 +1,7 @@
-from quant_etf import QuantETF
+from quant_etf import QuantETF, RebalanceDay
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr
-import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
 yf.pdr_override()
@@ -15,10 +14,10 @@ class VAA_A(QuantETF):
 
     @classmethod
     def __momentum(cls, data):
-        ds20  = (data / data.shift(20)  - 1) * 12
-        ds60  = (data / data.shift(60)  - 1) * 4
-        ds120 = (data / data.shift(120) - 1) * 2
-        ds240 = (data / data.shift(240) - 1)
+        ds20  = (data / data.shift(20)  - 1) * 12   # 1-Month
+        ds60  = (data / data.shift(60)  - 1) * 4    # 3-Month
+        ds120 = (data / data.shift(120) - 1) * 2    # 6-Month
+        ds240 = (data / data.shift(240) - 1)        # 12-Month
         m = ds20 + ds60 + ds120 + ds240        
         return m
 
@@ -30,6 +29,8 @@ class VAA_A(QuantETF):
         
         for ticker in tickers:
             d = pdr.get_data_yahoo(ticker, start=begin, end=end, progress=False)['Adj Close']
+            # d = laa.dropna().resample('BMS').last()
+
             data.append(d)
             m = cls.__momentum(d)
             momentum.append(m)
@@ -45,8 +46,11 @@ class VAA_A(QuantETF):
         a = self.__calculate(self.assets_a, begin, date)
         d = self.__calculate(self.assets_d, begin, date)
         v = pd.concat([a])
-        v = v.merge(d, how="outer", left_index=True, right_index=True)        
-    
+        v = v.merge(d, how="outer", left_index=True, right_index=True)
+        
+        # Set asset choice
+        v['Choice'] = v.apply(lambda x: self.__select(x), axis=1)
+
         # Check momentum score
         aggresive = True
         for ticker in self.assets_a:
@@ -58,17 +62,26 @@ class VAA_A(QuantETF):
         print("Momentum score for defensive assets")
         for ticker in self.assets_d:
             print(f"    {ticker}: {d.iloc[-1][ticker + '_M']:.3f}")
-        v['Choice'] = v.apply(lambda x: self.__select(x), axis=1)
         print("Asset choice: " + v.iloc[-1]['Choice'])
+
+        choice_before = v.iloc[-2]['Choice']
+        growth = v.iloc[-1][choice_before] / v.iloc[-2][choice_before] - 1
+        print(f"1-Month Growth: {growth:.3f}")
     
 
-    def backtest(self, begin, end, rebalance_month=1):
+    def backtest(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         start = begin + timedelta(days=-400)
         a = self.__calculate(self.assets_a, start, end)
         d = self.__calculate(self.assets_d, start, end)
 
         vaa = pd.concat([a])
         vaa = vaa.merge(d, how="outer", left_index=True, right_index=True).dropna()     
+        # Rebalance every last day of each month
+
+        if rebalance_date == RebalanceDay.LAST_DAY:
+            vaa = vaa.dropna().resample(rule='M').apply(lambda x: x[-1])
+        else:
+            vaa = vaa.dropna().resample('BMS').first()
 
         vaa['Growth'] = 1
         vaa['Choice'] = vaa.apply(lambda x: self.__select(x), axis=1)
@@ -79,8 +92,6 @@ class VAA_A(QuantETF):
             vaa.loc[vaa.index[i], 'Growth'] = vaa.iloc[i-1]['Growth'] * profit
         
         vaa = self.add_dd(vaa)
-
-        vaa.to_excel('vaa.xlsx')
 
         return vaa
 

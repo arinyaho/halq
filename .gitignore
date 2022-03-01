@@ -1,3 +1,5 @@
 *.api
 *.csv
 *.xlsx
+.vscode
+__pycache__

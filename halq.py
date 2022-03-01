@@ -6,7 +6,8 @@ from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
 from fredapi import Fred
 
-from vaa_a import VAA_A
+from etf.vaa_a import VAA_A
+from etf.laa import LAA
 
 import abc
 import argparse
@@ -17,21 +18,18 @@ from datetime import datetime, timedelta
 
 yf.pdr_override()
 
-'''
-class Quant:
-    def __init__(self, name):
-        self.name = name
 
-    # Print choice for rebalancing and the 
-    @abstractmethod
-    def choice(self, date):
-        pass
-    
-    # Get Pandas DataFrame of backtest data
-    @abstractmethod
-    def backtest(self, begin, end) -> pd.DataFrame:
-        pass
-'''
+def dispaly_figure(data, title):
+    capr = plt.figure(1)
+    capr.suptitle(f"{title} Growth")    
+    data['Growth'].plot.line()
+
+    mdd = plt.figure(2)
+    mdd.suptitle(f"{title} MDD")
+    (data['dd'] * 100).plot.line(color='red')
+
+    plt.show()
+
 
 def parse():
     parser = argparse.ArgumentParser(description="Hal-To Quant")
@@ -55,215 +53,6 @@ def profit(ticker, date, dayOffset):
     f = spy.head(1).iloc[0]['Close']
     r = spy.tail(1).iloc[0]['Close']
     return r/f - 1.
-
-def vaa_a_momentum(data):
-    ds20  = (data / data.shift(20)  - 1) * 12
-    ds60  = (data / data.shift(60)  - 1) * 4
-    ds120 = (data / data.shift(120) - 1) * 2
-    ds240 = (data / data.shift(240) - 1)
-    m = ds20 + ds60 + ds120 + ds240
-    
-    return m
-
-def vaa_a(date):    
-    assets_a = ['SPY', 'EFA', 'EEM', 'AGG']     # Aggresive
-    assets_d = ['LQD', 'IEF', 'SHY']            # Defensive    
-
-    begin = date + timedelta(days=-400)
-    a, amax = vaa_a_calculate(assets_a, begin, date)
-    d, dmax = vaa_a_calculate(assets_d, begin, date)
-  
-    # Check momentum score
-    aggresive = True
-    for ticker in assets_a:
-        aggresive = aggresive and a.iloc[-1][ticker + '_M'] >= 0
-    
-    print("VAA-Aggresive: Monthly rebalancing")
-    print("Momentum score for aggresive assets")
-    for ticker in assets_a:
-        print(f"    {ticker}: {a.iloc[-1][ticker + '_M']:.3f}")
-    print("Momentum score for defensive assets")
-    for ticker in assets_d:
-        print(f"    {ticker}: {d.iloc[-1][ticker + '_M']:.3f}")
-    print("Asset choice: " + (amax if aggresive else dmax))
-
-def vaa_select(row):
-    aggresive = True
-    for ticker in assets_a:
-        aggresive = aggresive and row[ticker + '_M'] >= 0
-    pass
-
-def vaa_a_backtest(begin, end):
-    assets_a = ['SPY', 'EFA', 'EEM', 'AGG']     # Aggresive
-    assets_d = ['LQD', 'IEF', 'SHY']            # Defensive    
-
-    begin = date + timedelta(days=-400)
-    a, amax = vaa_a_calculate(assets_a, begin, date)
-    d, dmax = vaa_a_calculate(assets_d, begin, date)
-    vaa = pd.concat([a, d])
-    vaa['Growth'] = 1
-
-    laa['Choice'] = laa.apply(lambda x: select_vaa(x), axis=1)    
-    
-    pass
-
-
-def vaa_a_calculate(tickers, begein, end):
-    data = []
-    momentum = []
-    
-    for ticker in tickers:
-        d = pdr.get_data_yahoo(ticker, start=begin, end=end, progress=False)['Adj Close']
-        data.append(d)
-        m = vaa_a_momentum(d)
-        momentum.append(m)
-
-    a = pd.concat(data + momentum, axis=1)
-    a.columns = tickers + [s + '_M' for s in tickers]
-
-    max_ticker = ''
-    max_value = float('-inf')
-    for ticker in tickers:
-        if a.iloc[-1][ticker + '_M'] > max_value:
-            max_ticker = ticker
-            max_value = a.iloc[-1][ticker + '_M']
-
-    return a, max_ticker
-
-
-def laa(date):
-    # 200 days moving average of S&P500 index
-    begin = date + timedelta(days=-365)
-    spy = pdr.get_data_yahoo('^GSPC', start=begin, end=date, progress=False)['Adj Close']
-    spy_ma200 = spy.rolling(window=200).mean()
-
-    if not os.path.exists('fred.api'):
-        print('FRED API Key file not found: fred.api')
-        sys.exit(1)
-
-    with open('fred.api', 'r') as fin:
-        apikey = fin.read()
-    
-    fred = Fred(api_key=apikey)
-    unrate = fred.get_series('UNRATE').tail(15)
-    unrate_ma12m = unrate.rolling(window=12).mean()
-
-    choose_shy = spy[-1] < spy_ma200[-1] and unrate[-1] > unrate_ma12m[-1]
-    choice = 'SHY' if choose_shy else 'QQQ'
-
-    print("LAA")
-    print("  Monthly Rebalancing: QQQ or SHY")
-    print("  Yearly Rebalancing: GLD, IWD, IEF, (QQQ or SHY)")
-    print("Indicators (%s)" % date)
-    print("  S&P500,       MA200: %.2f, %.2f" % (spy[-1], spy_ma200[-1]))
-    print("  Unemployment, MA12m: %.2f, %.2f" % (unrate[-1], unrate_ma12m[-1]))
-    print("Asset to buy:")
-    print("  GLD: 25%")
-    print("  IWD: 25%")
-    print("  IEF: 25%")
-    print("  %s: 25%%" % choice)
-
-
-def select_laa(x):
-    choice = pd.Series([0], index=['Choice'])
-    choose_shy = x['S&P500'] < x['S&P500_MA200'] and x['UNRATE'] > x['UNRATE_MA12M']
-    choice['Choice'] = 'SHY' if choose_shy else 'QQQ'
-    return choice
-
-
-def laa_backtest(begin, end, rebalance_month=1):
-    if not os.path.exists('fred.api'):
-        print('FRED API Key file not found: fred.api')
-        sys.exit(1)
-
-    with open('fred.api', 'r') as fin:
-        apikey = fin.read()
-
-    fred = Fred(api_key=apikey)
-
-    begin = begin + timedelta(days=-365)
-    gld = pdr.get_data_yahoo('GLD', start=begin, end=end, progress=False)['Adj Close']
-    iwd = pdr.get_data_yahoo('IWD', start=begin, end=end, progress=False)['Adj Close']
-    ief = pdr.get_data_yahoo('IEF', start=begin, end=end, progress=False)['Adj Close']
-    qqq = pdr.get_data_yahoo('QQQ', start=begin, end=end, progress=False)['Adj Close']
-    shy = pdr.get_data_yahoo('SHY', start=begin, end=end, progress=False)['Adj Close']
-    snp = pdr.get_data_yahoo('^GSPC', start=begin, end=end, progress=False)['Adj Close']
-    une = fred.get_series('UNRATE')
-    une.name = 'UNRATE'
-
-    snp_ma200 = snp.rolling(window=200).mean()
-    une_ma12m = une.rolling(window=12).mean()
-    une_ma12m.name = 'UNRATE_MA12M'
-
-    laa = pd.concat([gld, iwd, ief, qqq, shy, snp, snp_ma200], axis=1)
-    laa.columns = ['GLD', 'IWD', 'IEF', 'QQQ', 'SHY', 'S&P500', 'S&P500_MA200']
-
-    laa = laa.merge(une, how="outer", left_index=True, right_index=True)        
-    laa['UNRATE'] = laa['UNRATE'].fillna(method='ffill')
-
-    laa = laa.merge(une_ma12m, how='outer', left_index=True, right_index=True)
-    laa['UNRATE_MA12M'] = laa['UNRATE_MA12M'].fillna(method='ffill')
-    
-    laa = laa.dropna().resample('BMS').first()
-
-    laa['Choice'] = laa.apply(lambda x: select_laa(x), axis=1)    
-    laa[['GLD_HOLD', 'IWD_HOLD', 'IEF_HOLD']] = 0.25
-    laa[['QQQ_HOLD', 'SHY_HOLD']] = 0
-    if laa.iloc[0]['Choice'] == 'QQQ':
-        laa.loc[laa.index[0], ['QQQ_HOLD']] = 0.25
-    else:
-        laa.loc[laa.index[0], ['SHY_HOLD']] = 0.25
-
-    for i in range(1, len(laa)):
-        laa.loc[laa.index[i], 'GLD_HOLD'] = laa.iloc[i-1]['GLD_HOLD'] * laa.iloc[i]['GLD'] / laa.iloc[i-1]['GLD']
-        laa.loc[laa.index[i], 'IWD_HOLD'] = laa.iloc[i-1]['IWD_HOLD'] * laa.iloc[i]['IWD'] / laa.iloc[i-1]['IWD']
-        laa.loc[laa.index[i], 'IEF_HOLD'] = laa.iloc[i-1]['IEF_HOLD'] * laa.iloc[i]['IEF'] / laa.iloc[i-1]['IEF']
-        laa.loc[laa.index[i], 'QQQ_HOLD'] = laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ'] / laa.iloc[i-1]['QQQ']
-        laa.loc[laa.index[i], 'SHY_HOLD'] = laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY'] / laa.iloc[i-1]['SHY']
-        
-        if laa.iloc[i-1]['Choice'] == 'QQQ':
-            if laa.iloc[i]['Choice'] == 'SHY':
-                val = laa.iloc[i]['QQQ_HOLD'] * laa.iloc[i]['QQQ']
-                laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
-                laa.loc[laa.index[i], 'SHY_HOLD'] = val / laa.iloc[i]['SHY']
-        else:
-            if laa.iloc[i]['Choice'] == 'QQQ':
-                val = laa.iloc[i]['SHY_HOLD'] * laa.iloc[i]['SHY']        
-                laa.loc[laa.index[i], 'SHY_HOLD'] = 0
-                laa.loc[laa.index[i], 'QQQ_HOLD'] = val / laa.iloc[i]['QQQ']
-            
-            
-        # Yearly rebalancing
-        if i > 12 and laa.index[i].month == rebalance_month:
-            sum = laa.loc[laa.index[i], 'GLD_HOLD'] + laa.loc[laa.index[i], 'IWD_HOLD'] + laa.loc[laa.index[i], 'IEF_HOLD'] + laa.loc[laa.index[i], 'QQQ_HOLD'] + laa.loc[laa.index[i], 'SHY_HOLD']
-            laa.loc[laa.index[i], 'GLD_HOLD'] = sum / 4
-            laa.loc[laa.index[i], 'IWD_HOLD'] = sum / 4
-            laa.loc[laa.index[i], 'IEF_HOLD'] = sum / 4
-            laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
-            laa.loc[laa.index[i], 'SHY_HOLD'] = 0
-            if laa.iloc[i]['Choice'] == 'QQQ':
-                laa.loc[laa.index[i], 'QQQ_HOLD'] = sum / 4
-            else:
-                laa.loc[laa.index[i], 'SHY_HOLD'] = sum / 4
-
-    ## MDD
-    laa['Profit'] = laa['GLD_HOLD'] + laa['IWD_HOLD'] + laa['IEF_HOLD'] + laa['QQQ_HOLD'] + laa['SHY_HOLD']
-    laa['dd'] = -1 * (laa['Profit'].cummax() - laa['Profit']) / laa['Profit'].cummax()    
-    print('Start: %s' % laa.index[0].strftime('%Y-%m-%d'))
-    print('End  : %s' % laa.index[-1].strftime('%Y-%m-%d'))
-    print('CAPR: %.3f' % (((laa['Profit'][-1] ** (1. / (len(laa) / 12)) - 1)) * 100))
-    print('MDD: %.3f' % (laa['dd'].min() * 100))
-
-    capr = plt.figure(1)
-    capr.suptitle("LAA Growth")    
-    laa['Profit'].plot.line()
-
-    mdd = plt.figure(2)
-    mdd.suptitle("LAA MDD")
-    (laa['dd'] * 100).plot.line(color='red')
-    plt.show()
-
-    laa.to_excel('laa_backtest.xlsx')
 
 
 def dual_momentum_original(date):
@@ -377,14 +166,17 @@ def main():
     
     fundic = {
         ('dmo', False): dual_momentum_original,
-        ('dmo', True): dual_momentum_original_backtest,
-        ('laa', False): laa,
-        ('laa', True): laa_backtest,
-        ('vaa-a', False): vaa_a
+        ('dmo', True): dual_momentum_original_backtest
     }
 
     clsdic = {
+        'laa': LAA,
         'vaa-a': VAA_A
+    }
+
+    sfullname = {
+        'laa': 'Lethargic Asset Allocation',
+        'vaa-a': 'Vigilant Asset Allocation Aggresive'
     }
 
     if (args.list):
@@ -402,13 +194,17 @@ def main():
         if args.backtest:
             b = datetime.strptime(args.begin, '%Y%m%d')
             e = datetime.strptime(args.end, '%Y%m%d')            
-            data = q.backtest(b, e, args.rebalance_month)
+            data = q.backtest(b, e, rebalance_month=args.rebalance_month)
             days = (e - b).days
             growth = data['Growth'][-1]
             print('Start: %s' % data.index[0].strftime('%Y-%m-%d'))
             print('End  : %s' % data.index[-1].strftime('%Y-%m-%d'))
             print('CAPR: %.3f' % (((growth ** (1. / (days / 365)) - 1)) * 100))
             print('MDD: %.3f' % (data['dd'].min() * 100))
+
+            print(data.tail())
+            data.to_excel(f'{sname}.xlsx')
+            dispaly_figure(data, sfullname[sname])
         else:
             date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
             q.rebalance(date)
