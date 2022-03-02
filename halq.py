@@ -38,7 +38,7 @@ def parse():
     parser.add_argument('--backtest', action='store_true', help='Backtest')
     parser.add_argument('--begin', type=str, help='Backtest begin date in YYYYMMDD format')
     parser.add_argument('--end', type=str, help='Backtest end date in YYYYMMDD format')
-    parser.add_argument('--seed', type=int, default=0, help='Seed for backtest')
+    parser.add_argument('--seed', type=int, default=1, help='Seed for backtest')
     parser.add_argument('--installment', type=int, default=0, help='Montly installment for backtest')
     parser.add_argument('--rebalance-month', type=int, default=1, choices=range(1, 13), help='Month for rebalancing asset allocation')
     parser.add_argument('--list', action='store_true', default=False, help='List strategies')

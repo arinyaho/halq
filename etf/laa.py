@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 from fredapi import Fred
 
 import os
+import multiprocessing
+from functools import partial
+
 
 yf.pdr_override()
 
@@ -79,20 +82,31 @@ class LAA(QuantETF):
         fred = Fred(api_key=apikey)
 
         begin = begin + timedelta(days=-365)
+
+        with multiprocessing.Pool(processes=4) as pools:
+            get_data = partial(pdr.get_data_yahoo, start=begin, end=end, progress=False)
+            data = pools.map(get_data, self.assets + ['^GSPC'])
+        for i in range(len(data)):
+            data[i] = data[i]['Adj Close']
+        
+        '''
         gld = pdr.get_data_yahoo('GLD', start=begin, end=end, progress=False)['Adj Close']
         iwd = pdr.get_data_yahoo('IWD', start=begin, end=end, progress=False)['Adj Close']
         ief = pdr.get_data_yahoo('IEF', start=begin, end=end, progress=False)['Adj Close']
         qqq = pdr.get_data_yahoo('QQQ', start=begin, end=end, progress=False)['Adj Close']
         shy = pdr.get_data_yahoo('SHY', start=begin, end=end, progress=False)['Adj Close']
         snp = pdr.get_data_yahoo('^GSPC', start=begin, end=end, progress=False)['Adj Close']
+        '''
         une = fred.get_series('UNRATE')
         une.name = 'UNRATE'
 
-        snp_ma200 = snp.rolling(window=200).mean()
+        # snp_ma200 = snp.rolling(window=200).mean()
+        snp_ma200 = data[5].rolling(window=200).mean()
         une_ma12m = une.rolling(window=12).mean()
         une_ma12m.name = 'UNRATE_MA12M'
 
-        laa = pd.concat([gld, iwd, ief, qqq, shy, snp, snp_ma200], axis=1)
+        # laa = pd.concat([gld, iwd, ief, qqq, shy, snp, snp_ma200], axis=1)
+        laa = pd.concat(data + [snp_ma200], axis=1)
         laa.columns = ['GLD', 'IWD', 'IEF', 'QQQ', 'SHY', 'S&P500', 'S&P500_MA200']
 
         laa = laa.merge(une, how="outer", left_index=True, right_index=True)        
@@ -106,47 +120,59 @@ class LAA(QuantETF):
         else:
             laa = laa.dropna().resample('BMS').first()
 
-        laa['Choice'] = laa.apply(lambda x: self.select_laa(x), axis=1)    
-        laa[['GLD_HOLD', 'IWD_HOLD', 'IEF_HOLD']] = seed / 4
+        laa['Choice'] = laa.apply(lambda x: self.select_laa(x), axis=1)
+        laa.loc[laa.index[0], ['GLD_HOLD']] = (seed / 4.) / laa.iloc[0]['GLD']
+        laa.loc[laa.index[0], ['IWD_HOLD']] = (seed / 4.) / laa.iloc[0]['IWD']
+        laa.loc[laa.index[0], ['IEF_HOLD']] = (seed / 4.) / laa.iloc[0]['IEF']
         laa[['QQQ_HOLD', 'SHY_HOLD']] = 0
         if laa.iloc[0]['Choice'] == 'QQQ':
-            laa.loc[laa.index[0], ['QQQ_HOLD']] = seed / 4
+            laa.loc[laa.index[0], ['QQQ_HOLD']] = (seed / 4.) / laa.iloc[0]['QQQ']
         else:
-            laa.loc[laa.index[0], ['SHY_HOLD']] = seed / 4
+            laa.loc[laa.index[0], ['SHY_HOLD']] = (seed / 4.) / laa.iloc[0]['SHY']
+
+        print(laa)
+        print(seed)
+        print(seed/4.)
+        print(seed/4./laa.iloc[0]['GLD'])
+        laa.to_excel('laa_init.xlsx')
 
         for i in range(1, len(laa)):
-            laa.loc[laa.index[i], 'GLD_HOLD'] = (laa.iloc[i-1]['GLD_HOLD'] * laa.iloc[i]['GLD']) / laa.iloc[i-1]['GLD'] + monthly_installment / 4
-            laa.loc[laa.index[i], 'IWD_HOLD'] = (laa.iloc[i-1]['IWD_HOLD'] * laa.iloc[i]['IWD']) / laa.iloc[i-1]['IWD'] + monthly_installment / 4
-            laa.loc[laa.index[i], 'IEF_HOLD'] = (laa.iloc[i-1]['IEF_HOLD'] * laa.iloc[i]['IEF']) / laa.iloc[i-1]['IEF'] + monthly_installment / 4
+            laa.loc[laa.index[i], 'GLD_HOLD'] = laa.iloc[i-1]['GLD_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['GLD']
+            laa.loc[laa.index[i], 'IWD_HOLD'] = laa.iloc[i-1]['IWD_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['IWD']
+            laa.loc[laa.index[i], 'IEF_HOLD'] = laa.iloc[i-1]['IEF_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['IEF']
             
             if laa.iloc[i-1]['Choice'] == 'QQQ':
-                if laa.iloc[i]['Choice'] == 'SHY':
-                    laa.loc[laa.index[i], 'QQQ_HOLD'] = (laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ']) / laa.iloc[i-1]['QQQ'] + monthly_installment
+                laa.loc[laa.index[i], 'QQQ_HOLD'] = laa.iloc[i-1]['QQQ_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['QQQ']
+                if laa.iloc[i]['Choice'] == 'SHY':                    
                     val = laa.iloc[i]['QQQ_HOLD'] * laa.iloc[i]['QQQ']
                     laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
                     laa.loc[laa.index[i], 'SHY_HOLD'] = val / laa.iloc[i]['SHY']
+
             else:
-                if laa.iloc[i]['Choice'] == 'QQQ':
-                    laa.loc[laa.index[i], 'SHY_HOLD'] = (laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY']) / laa.iloc[i-1]['SHY'] + monthly_installment
+                laa.loc[laa.index[i], 'SHY_HOLD'] = laa.iloc[i-1]['SHY_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['SHY']
+                if laa.iloc[i]['Choice'] == 'QQQ':                    
                     val = laa.iloc[i]['SHY_HOLD'] * laa.iloc[i]['SHY']        
                     laa.loc[laa.index[i], 'SHY_HOLD'] = 0
                     laa.loc[laa.index[i], 'QQQ_HOLD'] = val / laa.iloc[i]['QQQ']
-                
-                
+
             # Yearly rebalancing
             if i > 12 and laa.index[i].month == rebalance_month:
-                sum = laa.loc[laa.index[i], 'GLD_HOLD'] + laa.loc[laa.index[i], 'IWD_HOLD'] + laa.loc[laa.index[i], 'IEF_HOLD'] + laa.loc[laa.index[i], 'QQQ_HOLD'] + laa.loc[laa.index[i], 'SHY_HOLD']
-                laa.loc[laa.index[i], 'GLD_HOLD'] = sum / 4
-                laa.loc[laa.index[i], 'IWD_HOLD'] = sum / 4
-                laa.loc[laa.index[i], 'IEF_HOLD'] = sum / 4
+                sum = (laa.loc[laa.index[i], 'GLD_HOLD'] * laa.iloc[i]['GLD'] 
+                     + laa.loc[laa.index[i], 'IWD_HOLD'] * laa.iloc[i]['IWD'] 
+                     + laa.loc[laa.index[i], 'IEF_HOLD'] * laa.iloc[i]['IEF'] 
+                     + laa.loc[laa.index[i], 'QQQ_HOLD'] * laa.iloc[i]['QQQ'] 
+                     + laa.loc[laa.index[i], 'SHY_HOLD'] * laa.iloc[i]['SHY'])
+                laa.loc[laa.index[i], 'GLD_HOLD'] = (sum / 4.) / laa.iloc[i]['GLD']
+                laa.loc[laa.index[i], 'IWD_HOLD'] = (sum / 4.) / laa.iloc[i]['IWD']
+                laa.loc[laa.index[i], 'IEF_HOLD'] = (sum / 4.) / laa.iloc[i]['IEF']
                 laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
                 laa.loc[laa.index[i], 'SHY_HOLD'] = 0
                 if laa.iloc[i]['Choice'] == 'QQQ':
-                    laa.loc[laa.index[i], 'QQQ_HOLD'] = sum / 4
+                    laa.loc[laa.index[i], 'QQQ_HOLD'] = (sum / 4.) / laa.iloc[i]['QQQ']
                 else:
-                    laa.loc[laa.index[i], 'SHY_HOLD'] = sum / 4
+                    laa.loc[laa.index[i], 'SHY_HOLD'] = (sum / 4.) / laa.iloc[i]['SHY']
 
-        laa['Growth'] = laa['GLD_HOLD'] + laa['IWD_HOLD'] + laa['IEF_HOLD'] + laa['QQQ_HOLD'] + laa['SHY_HOLD']        
+        laa['Growth'] = laa['GLD_HOLD'] * laa['GLD'] + laa['IWD_HOLD'] * laa['IWD'] + laa['IEF_HOLD'] * laa['IEF'] + laa['QQQ_HOLD'] + laa['SHY_HOLD']        
         laa = self.add_dd(laa)
 
         return laa
