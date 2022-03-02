@@ -129,13 +129,7 @@ class LAA(QuantETF):
             laa.loc[laa.index[0], ['QQQ_HOLD']] = (seed / 4.) / laa.iloc[0]['QQQ']
         else:
             laa.loc[laa.index[0], ['SHY_HOLD']] = (seed / 4.) / laa.iloc[0]['SHY']
-
-        print(laa)
-        print(seed)
-        print(seed/4.)
-        print(seed/4./laa.iloc[0]['GLD'])
-        laa.to_excel('laa_init.xlsx')
-
+   
         for i in range(1, len(laa)):
             laa.loc[laa.index[i], 'GLD_HOLD'] = laa.iloc[i-1]['GLD_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['GLD']
             laa.loc[laa.index[i], 'IWD_HOLD'] = laa.iloc[i-1]['IWD_HOLD'] + (monthly_installment / 4.) / laa.iloc[i]['IWD']
