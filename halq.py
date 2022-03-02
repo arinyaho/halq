@@ -38,9 +38,18 @@ def parse():
     parser.add_argument('--backtest', action='store_true', help='Backtest')
     parser.add_argument('--begin', type=str, help='Backtest begin date in YYYYMMDD format')
     parser.add_argument('--end', type=str, help='Backtest end date in YYYYMMDD format')
+    parser.add_argument('--seed', type=int, default=0, help='Seed for backtest')
+    parser.add_argument('--installment', type=int, default=0, help='Montly installment for backtest')
     parser.add_argument('--rebalance-month', type=int, default=1, choices=range(1, 13), help='Month for rebalancing asset allocation')
-    parser.add_argument('--list', action='store_true', help='List strategies')
-    return parser.parse_args()
+    parser.add_argument('--list', action='store_true', default=False, help='List strategies')
+    args = parser.parse_args()
+    if args.seed < 0:
+        print('Seed for backtest should be greater than 0.')
+        sys.exit(1)
+    if args.installment < 0:
+        print('Monthly installment for backtest should be greater than 0.')
+        sys.exit(1)
+    return args
 
 
 def hq_ultra():
@@ -98,7 +107,7 @@ def main():
         if args.backtest:
             b = datetime.strptime(args.begin, '%Y%m%d')
             e = datetime.strptime(args.end, '%Y%m%d')            
-            data = q.backtest(b, e, rebalance_month=args.rebalance_month)
+            data = q.backtest(b, e, seed=args.seed, monthly_installment=args.installment, rebalance_month=args.rebalance_month)
             days = (e - b).days
             growth = data['Growth'][-1]
             print('Start: %s' % data.index[0].strftime('%Y-%m-%d'))
@@ -106,7 +115,7 @@ def main():
             print('CAPR: %.3f' % (((growth ** (1. / (days / 365)) - 1)) * 100))
             print('MDD: %.3f' % (data['dd'].min() * 100))
 
-            print(data.tail())
+            # print(data.tail())
             data.to_excel(f'{sname}.xlsx')
             data.to_csv(f'{sname}.csv')
             dispaly_figure(data, sfullname[sname])

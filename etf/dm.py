@@ -70,7 +70,7 @@ class DualMomentum(QuantETF):
         return asset
 
 
-    def backtest(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
+    def backtest(self, begin, end, seed=1, monthly_installment=0, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         begin = begin + timedelta(days=-365)
         spy = pdr.get_data_yahoo('SPY', start=begin, end=end, progress=False)['Adj Close']
         efa = pdr.get_data_yahoo('EFA', start=begin, end=end, progress=False)['Adj Close']
@@ -92,13 +92,13 @@ class DualMomentum(QuantETF):
         dmo[['SPY_YoY', 'EFA_YoY', 'BIL_YoY', 'AGG_YoY']] = dmo_yoy
         dmo = dmo.dropna()
         
-        dmo['Growth'] = 1
+        dmo['Growth'] = seed
         dmo['Choice'] = dmo.apply(lambda x: self.select_dmo(x), axis=1)
 
         for i in range(1, len(dmo)):
             asset_before = dmo.iloc[i-1]['Choice']
             profit_before = dmo.iloc[i][asset_before] / dmo.iloc[i-1][asset_before]
-            dmo.loc[dmo.index[i], 'Growth'] = dmo.iloc[i-1]['Growth'] * profit_before
+            dmo.loc[dmo.index[i], 'Growth'] = dmo.iloc[i-1]['Growth'] * profit_before + monthly_installment
         
 
         dmo = self.add_dd(dmo)

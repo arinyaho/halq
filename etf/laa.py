@@ -68,7 +68,7 @@ class LAA(QuantETF):
         return choice
 
 
-    def backtest(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
+    def backtest(self, begin, end, seed=1, monthly_installment=0, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         if not os.path.exists('fred.api'):
             print('FRED API Key file not found: fred.api')
             sys.exit(1)
@@ -107,27 +107,27 @@ class LAA(QuantETF):
             laa = laa.dropna().resample('BMS').first()
 
         laa['Choice'] = laa.apply(lambda x: self.select_laa(x), axis=1)    
-        laa[['GLD_HOLD', 'IWD_HOLD', 'IEF_HOLD']] = 0.25
+        laa[['GLD_HOLD', 'IWD_HOLD', 'IEF_HOLD']] = seed / 4
         laa[['QQQ_HOLD', 'SHY_HOLD']] = 0
         if laa.iloc[0]['Choice'] == 'QQQ':
-            laa.loc[laa.index[0], ['QQQ_HOLD']] = 0.25
+            laa.loc[laa.index[0], ['QQQ_HOLD']] = seed / 4
         else:
-            laa.loc[laa.index[0], ['SHY_HOLD']] = 0.25
+            laa.loc[laa.index[0], ['SHY_HOLD']] = seed / 4
 
         for i in range(1, len(laa)):
-            laa.loc[laa.index[i], 'GLD_HOLD'] = laa.iloc[i-1]['GLD_HOLD'] * laa.iloc[i]['GLD'] / laa.iloc[i-1]['GLD']
-            laa.loc[laa.index[i], 'IWD_HOLD'] = laa.iloc[i-1]['IWD_HOLD'] * laa.iloc[i]['IWD'] / laa.iloc[i-1]['IWD']
-            laa.loc[laa.index[i], 'IEF_HOLD'] = laa.iloc[i-1]['IEF_HOLD'] * laa.iloc[i]['IEF'] / laa.iloc[i-1]['IEF']
-            laa.loc[laa.index[i], 'QQQ_HOLD'] = laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ'] / laa.iloc[i-1]['QQQ']
-            laa.loc[laa.index[i], 'SHY_HOLD'] = laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY'] / laa.iloc[i-1]['SHY']
+            laa.loc[laa.index[i], 'GLD_HOLD'] = (laa.iloc[i-1]['GLD_HOLD'] * laa.iloc[i]['GLD']) / laa.iloc[i-1]['GLD'] + monthly_installment / 4
+            laa.loc[laa.index[i], 'IWD_HOLD'] = (laa.iloc[i-1]['IWD_HOLD'] * laa.iloc[i]['IWD']) / laa.iloc[i-1]['IWD'] + monthly_installment / 4
+            laa.loc[laa.index[i], 'IEF_HOLD'] = (laa.iloc[i-1]['IEF_HOLD'] * laa.iloc[i]['IEF']) / laa.iloc[i-1]['IEF'] + monthly_installment / 4
             
             if laa.iloc[i-1]['Choice'] == 'QQQ':
                 if laa.iloc[i]['Choice'] == 'SHY':
+                    laa.loc[laa.index[i], 'QQQ_HOLD'] = (laa.iloc[i-1]['QQQ_HOLD'] * laa.iloc[i]['QQQ']) / laa.iloc[i-1]['QQQ'] + monthly_installment
                     val = laa.iloc[i]['QQQ_HOLD'] * laa.iloc[i]['QQQ']
                     laa.loc[laa.index[i], 'QQQ_HOLD'] = 0
                     laa.loc[laa.index[i], 'SHY_HOLD'] = val / laa.iloc[i]['SHY']
             else:
                 if laa.iloc[i]['Choice'] == 'QQQ':
+                    laa.loc[laa.index[i], 'SHY_HOLD'] = (laa.iloc[i-1]['SHY_HOLD'] * laa.iloc[i]['SHY']) / laa.iloc[i-1]['SHY'] + monthly_installment
                     val = laa.iloc[i]['SHY_HOLD'] * laa.iloc[i]['SHY']        
                     laa.loc[laa.index[i], 'SHY_HOLD'] = 0
                     laa.loc[laa.index[i], 'QQQ_HOLD'] = val / laa.iloc[i]['QQQ']

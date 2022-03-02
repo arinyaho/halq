@@ -69,7 +69,7 @@ class VAA_A(QuantETF):
         print(f"1-Month Growth: {growth:.3f}")
     
 
-    def backtest(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
+    def backtest(self, begin, end, seed=1, monthly_installment=0, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         start = begin + timedelta(days=-400)
         a = self.__calculate(self.assets_a, start, end)
         d = self.__calculate(self.assets_d, start, end)
@@ -83,7 +83,7 @@ class VAA_A(QuantETF):
         else:
             vaa = vaa.dropna().resample('BMS').first()
 
-        vaa['Growth'] = 1
+        vaa['Growth'] = seed
         vaa['Choice'] = vaa.apply(lambda x: self.__select(x), axis=1)
 
         for i in range(1, len(vaa)):
