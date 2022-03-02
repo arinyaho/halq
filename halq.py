@@ -1,5 +1,4 @@
 import FinanceDataReader as fdr
-import dart_fss as dart
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr

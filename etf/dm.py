@@ -10,53 +10,67 @@ import os
 yf.pdr_override()
 
 class DualMomentum(QuantETF):
-    def __init__(self):
-        self.assets = ['SPY', 'EFA', 'BIL', 'AGG']
+    assets = ['SPY', 'EFA', 'BIL', 'AGG']
 
+    def __init__(self):
+        pass
+        
 
     @classmethod
-    def profit(cls, ticker, date):
+    def profit_month(cls, ticker, date):
         e = date
         b = e + timedelta(days=-400)
         d = pdr.get_data_yahoo(ticker, start=b, end=e, progress=False)['Adj Close']
 
-        f = d.iloc[-240]
+        f = d.iloc[-240]    # price before 1 year (240 business days)
         r = d.iloc[-1]
         return r/f - 1.
 
 
+    @classmethod
+    def profits_month(cls, date):
+        ret = {}
+        for ticker in cls.assets:
+            ret[ticker] = cls.profit_month(ticker, date)
+        return ret
+
+
+    @classmethod
+    def select(cls, profits):
+        if profits['SPY'] > profits['BIL']:
+            return 'SPY' if profits['SPY'] > profits['BIL'] else 'EFA'
+        else:
+            return 'AGG'
+    
+
     def rebalance(self, date):
-        spy = self.profit('SPY', date)
-        efa = self.profit('EFA', date)
-        bil = self.profit('BIL', date)
-        agg = self.profit('AGG', date)
+        profits = self.profits_month(date)
+        profits_before = self.profits_month(date + timedelta(days=-30))
+
+        choice = self.select(profits)
+        choice_before = self.select(profits_before)
 
         print("Original Dual Momentum: Monthly Rebalancing")
         print("Yearly Profit (%s)" % date)
-        print("  SPY: %f" % spy)
-        print("  EFA: %f" % efa)
-        print("  BIL: %f" % bil)
-        print("  AGG: %f" % agg)
+        print("  SPY: %f" % profits['SPY'])
+        print("  EFA: %f" % profits['EFA'])
+        print("  BIL: %f" % profits['BIL'])
+        print("  AGG: %f" % profits['AGG'])
 
-        if spy > bil:
-            ticker = 'SPY' if spy > efa else 'EFA'
-        else:
-            ticker = 'AGG'
+        print("Asset Allocation: %s 100%%" % choice)
+        print(f"1-Month Growth: {100 * (self.profit_month(choice_before, date)):.3f}%")
 
-        print("Asset Allocation: %s 100%%" % ticker)
-
-
-    def select_dmo(x):
-        asset = pd.Series([0,0], index=['ASSET', 'PRICE'])
+    @classmethod
+    def select_dmo(cls, x):
+        asset = pd.Series([0], index=['Choice'])
         if x['SPY_YoY'] > x['BIL_YoY']:
-            asset['ASSET'] = 'SPY' if x['SPY_YoY'] > x['EFA_YoY'] else 'EFA'        
+            asset['Choice'] = 'SPY' if x['SPY_YoY'] > x['EFA_YoY'] else 'EFA'        
         else:
-            asset['ASSET'] = 'AGG'
-        asset['PRICE'] = x[asset['ASSET']]
+            asset['Choice'] = 'AGG'
         return asset
 
 
-    def dual_momentum_original_backtest(begin, end, rebalance_month=1):
+    def backtest(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         begin = begin + timedelta(days=-365)
         spy = pdr.get_data_yahoo('SPY', start=begin, end=end, progress=False)['Adj Close']
         efa = pdr.get_data_yahoo('EFA', start=begin, end=end, progress=False)['Adj Close']
@@ -66,44 +80,26 @@ class DualMomentum(QuantETF):
         dmo = pd.concat([spy, efa, bil, agg], axis=1).dropna()
         dmo.columns = ['SPY', 'EFA', 'BIL', 'AGG']
 
-        # Takes only last day of each month
-        dmo = dmo.resample(rule='M').apply(lambda x: x[-1])
-        dmo_after = dmo.shift(periods=-12, axis=0)
-        
-        # YoY
-        dmo_yoy = dmo_after / dmo - 1.
-        dmo_yoy = dmo_yoy.shift(periods=12, axis=0).dropna()
+        # Takes only first or last day of each month
+        if rebalance_date == RebalanceDay.LAST_DAY:
+            dmo = dmo.dropna().resample(rule='M').apply(lambda x: x[-1])
+        else:
+            dmo = dmo.dropna().resample('BMS').first()
+
+        # Calculate YoY
+        dmo_12m = dmo.shift(12)
+        dmo_yoy = dmo / dmo_12m - 1.
         dmo[['SPY_YoY', 'EFA_YoY', 'BIL_YoY', 'AGG_YoY']] = dmo_yoy
-        dmo[['Asset', 'Price']] = dmo.apply(lambda x: select_dmo(x), axis=1)
         dmo = dmo.dropna()
         
-        dmo['Profit'] = 0
-        dmo['Profit_acc'] = 1
+        dmo['Growth'] = 1
+        dmo['Choice'] = dmo.apply(lambda x: self.select_dmo(x), axis=1)
 
-        for i in range(len(dmo)):
-            profit = 0
-            if i != 0:
-                asset_before = dmo.iloc[i-1]['Asset']
-                profit_acc_before = dmo.iloc[i-1]['Profit_acc']
-                profit = dmo.iloc[i][asset_before] / dmo.iloc[i-1][asset_before] - 1.
-                dmo.loc[dmo.index[i], 'Profit'] = profit
-                dmo.loc[dmo.index[i], 'Profit_acc'] = profit_acc_before * (1 + profit)
-            
-        ## MDD
-        dmo['dd'] = -1 * (dmo['Profit_acc'].cummax() - dmo['Profit_acc']) / dmo['Profit_acc'].cummax()
-        print('Start: %s' % dmo.index[0].strftime('%Y-%m-%d'))
-        print('End  : %s' % dmo.index[-1].strftime('%Y-%m-%d'))
-        print('CAPR: %.3f' % (((dmo['Profit_acc'][-1] ** (1. / (len(dmo) / 12)) - 1)) * 100))
-        print('MDD: %.3f' % (dmo['dd'].min() * 100))
+        for i in range(1, len(dmo)):
+            asset_before = dmo.iloc[i-1]['Choice']
+            profit_before = dmo.iloc[i][asset_before] / dmo.iloc[i-1][asset_before]
+            dmo.loc[dmo.index[i], 'Growth'] = dmo.iloc[i-1]['Growth'] * profit_before
+        
 
-        dmo.to_excel('dmo_backtest.xlsx')
-
-        capr = plt.figure(1)
-        capr.suptitle("Original Dual Momentum Growth")    
-        dmo['Profit_acc'].plot.line()
-
-        mdd = plt.figure(2)
-        mdd.suptitle("Original Dual Momentum MDD")
-        (dmo['dd'] * 100).plot.line(color='red')
-
-        plt.show()
+        dmo = self.add_dd(dmo)
+        return dmo
