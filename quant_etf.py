@@ -24,6 +24,7 @@ class QuantETF:
     def backtest(self, begin, end, seed=1, monthly_installment=0, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
         pass
 
+    # Get the best rebalancing month for yearly reallocation strategies
     @abstractmethod
     def find_best_month(self, begin, end, rebalance_date=RebalanceDay.LAST_DAY):
         pass

@@ -5,6 +5,7 @@ from pandas_datareader import data as pdr
 from datetime import datetime, timedelta
 from fredapi import Fred
 
+import sys
 import os
 
 yf.pdr_override()
@@ -92,14 +93,17 @@ class DualMomentum(QuantETF):
         dmo[['SPY_YoY', 'EFA_YoY', 'BIL_YoY', 'AGG_YoY']] = dmo_yoy
         dmo = dmo.dropna()
         
-        dmo['Growth'] = seed
+        dmo['Growth'] = seed        
         dmo['Choice'] = dmo.apply(lambda x: self.select_dmo(x), axis=1)
+        dmo['Hold'] = 0
+        dmo.loc[dmo.index[0], 'Hold'] = seed / dmo.iloc[0][dmo.iloc[0]['Choice']]
 
         for i in range(1, len(dmo)):
             asset_before = dmo.iloc[i-1]['Choice']
-            profit_before = dmo.iloc[i][asset_before] / dmo.iloc[i-1][asset_before]
-            dmo.loc[dmo.index[i], 'Growth'] = dmo.iloc[i-1]['Growth'] * profit_before + monthly_installment
-        
+            asset_now = dmo.iloc[i]['Choice']
+            val = dmo.iloc[i-1]['Hold'] * dmo.iloc[i][asset_before] + monthly_installment           
+            dmo.loc[dmo.index[i], ['Hold']] = val / dmo.iloc[i][asset_now]
+            dmo.loc[dmo.index[i], ['Growth']] = val
 
         dmo = self.add_dd(dmo)
         return dmo
