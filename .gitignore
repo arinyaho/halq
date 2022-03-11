@@ -1,5 +1,9 @@
 *.api
 *.csv
 *.xlsx
+
+stock/dart-data
+
 .vscode
+
 __pycache__
