@@ -1,4 +1,4 @@
-from quant_etf import QuantETF, RebalanceDay
+from .quant_etf import QuantETF, RebalanceDay
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr

@@ -1,11 +1,11 @@
-from quant_etf import QuantETF, RebalanceDay
+from .quant_etf import QuantETF, RebalanceDay
 import pandas as pd
 import yfinance as yf
 from pandas_datareader import data as pdr
 from datetime import datetime, timedelta
 from fredapi import Fred
 
-import os
+import os, sys
 import multiprocessing
 from functools import partial
 
@@ -23,11 +23,12 @@ class LAA(QuantETF):
         spy = pdr.get_data_yahoo('^GSPC', start=begin, end=date, progress=False)['Adj Close']
         spy_ma200 = spy.rolling(window=200).mean()
 
-        if not os.path.exists('fred.api'):
+        api_filename = 'api/fred.api'
+        if not os.path.exists(api_filename):
             print('FRED API Key file not found: fred.api')
             sys.exit(1)
 
-        with open('fred.api', 'r') as fin:
+        with open(api_filename, 'r') as fin:
             apikey = fin.read()
         
         fred = Fred(api_key=apikey)
@@ -72,11 +73,12 @@ class LAA(QuantETF):
 
 
     def backtest(self, begin, end, seed=1, monthly_installment=0, rebalance_date=RebalanceDay.LAST_DAY, rebalance_month=1):
-        if not os.path.exists('fred.api'):
+        api_filename = 'api/fred.api'
+        if not os.path.exists(api_filename):
             print('FRED API Key file not found: fred.api')
             sys.exit(1)
 
-        with open('fred.api', 'r') as fin:
+        with open(api_filename, 'r') as fin:
             apikey = fin.read()
 
         fred = Fred(api_key=apikey)
