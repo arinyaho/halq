@@ -1,5 +1,5 @@
 from corp import Market, Corp
-import re
+import re, sys
 
 
 # http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201020101
@@ -26,16 +26,24 @@ _dart_kosdaq_title = '코스닥시장상장법인'
 
 
 def _load_pl(filename, corps):
+    value_fields = set(['당기', '당기 1분기 3개월', '당기 반기 3개월', '당기 3분기 3개월'])
+
     # Sales, Net-Income
-    with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:
-        print(f'Reading {filename}')        
+    with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:        
+        fields = fin.readline().split('\t')
+        print(f'Reading {filename}, fields: {len(fields)}')
+        value_index = 12
+        if len(fields[12].strip()) == 0:
+            value_index = 13                
+                
         for line in fin:
             data = line.split('\t')
             type = data[3].strip()
             field = data[11].strip()
             field = re.sub('[^()가-힣]', '', field)
             field_code = data[10].strip()
-            value = data[12].strip()
+
+            value = data[value_index].strip()
             stock = data[1][1:-1]
 
             if type == _dart_kosdaq_title or type == _dart_kospi_title:
@@ -44,20 +52,19 @@ def _load_pl(filename, corps):
                 
                 if stock not in corps:
                     corps[stock] = Corp(name, stock, market)
-                
+
                 c = corps[stock]
+                if value is None or len(value) == 0:
+                    continue
                 
                 try:
                     if field == '당기순이익' or field == '당기순이익(손실)' or field == '분기순이익' or field == '분기순이익(손실)' or field_code == _dart_code_net_income1 or field_code == _dart_code_net_income2:
-                        if len(value) > 0:
-                            net_income = int(value.replace(',', ''))
-                            c.net_income = net_income
+                        net_income = int(value.replace(',', ''))
+                        c.net_income = net_income
                     elif field == '매출액' or field == "매출" or field == '수익(매출액)' or field_code == _dart_code_sales1 or field_code == _dart_code_sales2:
-                        if len(value) > 0:
-                            c.sales = int(value.replace(',', ''))
+                        c.sales = int(value.replace(',', ''))
                     elif field == '영업이익(손실)' or field == '영업이익':
-                        if len(value) > 0:
-                            c.profit = int(value.replace(',', ''))
+                        c.profit = int(value.replace(',', ''))
                 except ValueError:
                     print('Invalid', c.name, field, value)
                     # del corps[stock]
@@ -65,7 +72,11 @@ def _load_pl(filename, corps):
 
 def _load_cf(filename, corps):
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:    
-        print(f'Reading {filename}')        
+        fields = fin.readline().split('\t')
+        print(f'Reading {filename}, fields: {len(fields)}')
+        value_index = 12
+        if len(fields[12].strip()) == 0:
+            value_index = 13     
         for line in fin:
             data = line.split('\t')
             type = data[3].strip()
@@ -73,7 +84,7 @@ def _load_cf(filename, corps):
             field = re.sub('[^()가-힣]', '', field)
             field_code = data[10].strip()
             stock = data[1][1:-1].strip()
-            value = data[12].strip()
+            value = data[value_index].strip()
 
             if type == _dart_kosdaq_title or type == _dart_kospi_title:            
                 if stock not in corps:
@@ -93,7 +104,7 @@ def _load_cf(filename, corps):
                             c.capex = 0
                         c.capex += int(value.replace(',', ''))
                     # elif field == '유형자산의취득' or field_code == _dart_code_capex2:
-                    elif field_code == _dart_code_capex2 or field_code == _dart_code_capex4:
+                    elif field_code == _dart_code_capex3 or field_code == _dart_code_capex4:
                         if c.capex is None:
                             c.capex = 0
                         c.capex += int(value.replace(',', ''))
@@ -104,13 +115,17 @@ def _load_cf(filename, corps):
 
 def _load_bs(filename, corps):        
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:    
-        print(f'Reading {filename}')        
+        fields = fin.readline().split('\t')
+        print(f'Reading {filename}, fields: {len(fields)}')
+        value_index = 12
+        if len(fields[12].strip()) == 0:
+            value_index = 13        
         for line in fin:
             data = line.split('\t')
             type = data[3].strip()
             field = data[11].strip()
             stock = data[1][1:-1]
-            value = data[12].strip()
+            value = data[value_index].strip()
 
             if type == _dart_kosdaq_title or type == _dart_kospi_title:
                 if stock not in corps:
@@ -173,11 +188,11 @@ def load_corps(year, quarter):
     _load_data(corps, year, quarter, 'CF', True)
 
     # 재무상태표(연결)
-    _load_data(corps, year, quarter, 'BS', False)    
+    _load_data(corps, year, quarter, 'BS', False)
     _load_data(corps, year, quarter, 'BS', True)
 
     # 시가총액, 상장주식수
-    filename = f'{year}-{1}Q-Stocks.csv'
+    filename = f'{year}-{quarter}Q-Stocks.csv'
     _load_shares(filename, corps)
 
     for corp in corps.values():
@@ -190,21 +205,35 @@ def load_corps(year, quarter):
         if not valid:
             corps_invalid[corp.stock] = corp
             pass
-    
-    
 
     for stock in corps_invalid:
         del corps[stock]
     
     return corps
 
+
+if __name__ == '__main__':
+    for year in range(2016, 2021):
+        for quarter in range(1, 5):
+            corps = load_corps(year, quarter)
+            print(year, quarter, len(corps))
+            print()
+    
+    year = 2021
+    for quarter in range(1, 4):
+        corps = load_corps(year, quarter)
+        print(year, quarter, len(corps))
+        print()
+    
+    
+'''
 year = 2021
 corps = load_corps(year, 1)
 print(f'Coporations with full data: {len(corps)}')
 
 
 
-'''
+
 # Cash-Flow
 type = 'CF'
 filename = f'{year}-{quarter}Q-{type}.txt'
