@@ -1,22 +1,36 @@
 from corp import Market, Corp
-import re, sys
+import re, json
 
 
 # http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201020101
 
-
+# 매출액
 _dart_code_sales1 = 'ifrs_Revenue'
 _dart_code_sales2 = 'ifrs-full_Revenue'
 
 _dart_code_net_income1 = 'ifrs_ProfitLoss'
 _dart_code_net_income2 = 'ifrs-full_ProfitLoss'
 
+
+# 영업이익
+_dart_code_profit1 = 'dart_OperatingIncomeLoss'
+
+# 자산총계
+_dart_code_assets1 = 'ifrs_Assets'
+_dart_code_assets2 = 'ifrs-full_Assets'
+
+# 현금흐름
 _dart_code_cash_flow1 = 'ifrs_CashFlowsFromUsedInOperatingActivities'
 _dart_code_cash_flow2 = 'ifrs-full_CashFlowsFromUsedInOperatingActivities'
+
+# 부채총계
+_dart_code_liabilities1 = 'ifrs_Liabilities'
+_dart_code_liabilities2 = 'ifrs-full_Liabilities'
 
 # 무형자산의 취득
 _dart_code_capex1 = 'ifrs_PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities'
 _dart_code_capex2 = 'ifrs-full_PurchaseOfIntangibleAssetsClassifiedAsInvestingActivities'
+
 # 유형자산의 취득
 _dart_code_capex3 = 'ifrs_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities'
 _dart_code_capex4 = 'ifrs-full_PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities'
@@ -52,8 +66,8 @@ def _load_pl(filename, corps):
                 
                 if stock not in corps:
                     corps[stock] = Corp(name, stock, market)
-
                 c = corps[stock]
+
                 if value is None or len(value) == 0:
                     continue
                 
@@ -63,7 +77,7 @@ def _load_pl(filename, corps):
                         c.net_income = net_income
                     elif field == '매출액' or field == "매출" or field == '수익(매출액)' or field_code == _dart_code_sales1 or field_code == _dart_code_sales2:
                         c.sales = int(value.replace(',', ''))
-                    elif field == '영업이익(손실)' or field == '영업이익':
+                    elif field == '영업이익(손실)' or field == '영업이익' or field == '영업손실' or field_code == _dart_code_profit1:
                         c.profit = int(value.replace(',', ''))
                 except ValueError:
                     print('Invalid', c.name, field, value)
@@ -87,11 +101,13 @@ def _load_cf(filename, corps):
             value = data[value_index].strip()
 
             if type == _dart_kosdaq_title or type == _dart_kospi_title:            
-                if stock not in corps:
-                    continue
-
-                c = corps[stock]
+                name = data[2].strip()
+                market = Market.KOSDAQ if type == _dart_kosdaq_title else Market.KOSPI
                 
+                if stock not in corps:
+                    corps[stock] = Corp(name, stock, market)
+                c = corps[stock]
+
                 if value is None or len(value) == 0:
                     continue
 
@@ -99,12 +115,12 @@ def _load_cf(filename, corps):
                     if field == '영업활동현금흐름' or field == '영업활동으로인한현금흐름' or field_code == _dart_code_cash_flow1 or field_code == _dart_code_cash_flow2:
                         c.cash_flow = int(value.replace(',', ''))
                     # elif field == '무형자산의취득' or field_code == _dart_code_capex1:
-                    elif field_code == _dart_code_capex1 or field_code == _dart_code_capex2:
+                    elif field == '무형자산의취득' or field_code == _dart_code_capex1 or field_code == _dart_code_capex2:
                         if c.capex is None:
                             c.capex = 0
                         c.capex += int(value.replace(',', ''))
                     # elif field == '유형자산의취득' or field_code == _dart_code_capex2:
-                    elif field_code == _dart_code_capex3 or field_code == _dart_code_capex4:
+                    elif '유형자산의취득' or field_code == _dart_code_capex3 or field_code == _dart_code_capex4:
                         if c.capex is None:
                             c.capex = 0
                         c.capex += int(value.replace(',', ''))
@@ -124,6 +140,7 @@ def _load_bs(filename, corps):
             data = line.split('\t')
             type = data[3].strip()
             field = data[11].strip()
+            field_code = data[10].strip()
             stock = data[1][1:-1]
             value = data[value_index].strip()
 
@@ -132,12 +149,19 @@ def _load_bs(filename, corps):
                     continue
 
                 c = corps[stock]
+
+                if value is None or len(value) == 0:
+                    continue
                 
                 try:
-                    if field == '자본총계':
-                        c.book_value = int(value.replace(',', ''))
+                    if field == '자산총계' or field_code == _dart_code_assets1 or field_code == _dart_code_assets2:
+                        c.assets = int(value.replace(',', ''))
+                    elif field == '부채총계' or field_code == _dart_code_liabilities1 or field_code == _dart_code_liabilities2:
+                        c.liabilities = int(value.replace(',', ''))
+                    #if field == '자본총계':
+                    #    c.book_value = int(value.replace(',', ''))
                 except ValueError:
-                    print('Invalid', c.name, field, value)
+                    print('Invalid', filename, c.name, field, value)
                     # del corps[stock]
 
 
@@ -160,7 +184,7 @@ def _load_shares(filename, corps):
                 c.price = int(data[4].strip().replace('"', ''))
                 c.shares = int(data[-1].strip().replace('"', ''))
             except ValueError:
-                print('Invalid', c.name, data)
+                print('Invalid', filename, c.name, data)
                 continue
 
 def _load_data(corps, year, quarter, type, c=False):
@@ -175,41 +199,58 @@ def load_corps(year, quarter):
     corps = {}
     corps_invalid = {}
 
-    # 손익계산서(연결)
-    _load_data(corps, year, quarter, 'PL', False)    
-    _load_data(corps, year, quarter, 'PL', True)
+    try:
+        # 손익계산서(연결)
+        _load_data(corps, year, quarter, 'PL', False)    
+        _load_data(corps, year, quarter, 'PL', True)
 
-    # 포괄손익계산서(연결)
-    _load_data(corps, year, quarter, 'CPL', False)    
-    _load_data(corps, year, quarter, 'CPL', True)
-    
-    # 현금흐름표(연결)
-    _load_data(corps, year, quarter, 'CF', False)    
-    _load_data(corps, year, quarter, 'CF', True)
+        # 포괄손익계산서(연결)
+        _load_data(corps, year, quarter, 'CPL', False)    
+        _load_data(corps, year, quarter, 'CPL', True)
+        
+        # 현금흐름표(연결)
+        _load_data(corps, year, quarter, 'CF', False)    
+        _load_data(corps, year, quarter, 'CF', True)
 
-    # 재무상태표(연결)
-    _load_data(corps, year, quarter, 'BS', False)
-    _load_data(corps, year, quarter, 'BS', True)
+        # 재무상태표(연결)
+        _load_data(corps, year, quarter, 'BS', False)
+        _load_data(corps, year, quarter, 'BS', True)
 
-    # 시가총액, 상장주식수
-    filename = f'{year}-{quarter}Q-Stocks.csv'
-    _load_shares(filename, corps)
+        # 시가총액, 상장주식수
+        filename = f'{year}-{quarter}Q-Stocks.csv'
+        _load_shares(filename, corps)
 
-    for corp in corps.values():
-        asdict = corp.__dict__
-        valid = True
-        # print(asdict)
-        for v in asdict.values():
-            if v is None:
-                valid = False
-        if not valid:
-            corps_invalid[corp.stock] = corp
-            pass
+        with open(f'{year}-{quarter}.log', 'w', encoding='utf-8') as fout:
+            for corp in corps.values():
+                asdict = corp.__dict__
+                valid = True
+                # print(asdict)
+                for v in asdict.values():
+                    if v is None:
+                        valid = False
+                if not valid:
+                    corps_invalid[corp.stock] = corp
+                    
+                    delkeys = []
+                    for k in asdict.keys():
+                        if k != 'name' and asdict[k] is not None:
+                            delkeys.append(k)                            
+                    for k in delkeys:
+                        del asdict[k]
+                    
+                    log = json.dumps(asdict, indent=4, ensure_ascii=False)
+                    # print(log)
+                    fout.write(log)
+                    pass
 
-    for stock in corps_invalid:
-        del corps[stock]
-    
-    return corps
+        for stock in corps_invalid:
+            del corps[stock]
+        print(f'Invalid: {year} {quarter}Q {len(corps_invalid)}')
+        
+        return corps.values()
+    except Exception as ex:
+        print(ex)
+        return None
 
 
 if __name__ == '__main__':

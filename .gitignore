@@ -1,6 +1,7 @@
 *.api
 *.csv
 *.xlsx
+*.log
 
 stock/dart-data
 

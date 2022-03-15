@@ -4,7 +4,7 @@ from enum import Enum
 import pandas as pd
 
 
-class QuantHQ:
+class QuantStock:
     def __init__(self):
         pass
 

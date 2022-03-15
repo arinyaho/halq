@@ -1,9 +1,9 @@
 from enum import Enum
 
 
-class Market(Enum):
-    KOSPI = 1
-    KOSDAQ = 2
+class Market(str, Enum):
+    KOSPI = 'KOSPI'
+    KOSDAQ = 'KOSDAQ'
 
 
 class Corp:
@@ -15,7 +15,9 @@ class Corp:
         self.net_income = None
         self.profit = None
         self.cash_flow = None
-        self.book_value = None
+        #self.book_value = None
+        self.assets = None
+        self.liabilities = None
         self.price = None
         self.shares = None
         self.capex = None
@@ -26,11 +28,14 @@ class Corp:
 
     
     def pbr(self):
-        return self.price * self.shares / self.book_value
+        return self.price * self.shares / (self.assets - self.liabilities)
     
 
     def psr(self):
-        return self.price * self.shares / self.sales
+        try:
+            return self.price * self.shares / self.sales
+        except ZeroDivisionError:
+            return float('inf')
 
 
     def fcf(self):
