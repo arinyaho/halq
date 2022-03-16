@@ -27,33 +27,11 @@ class HQ_VM(QuantStock):
         return year, quarter
 
 
-
-    def choice(self, date, numbers=20):
-        year, quarter = self.get_prev_year_and_quarter(date)
-
-        corps_py = krx.load_corps(year-1, quarter)
-        print('PY Type' + type(corps_pq))
-        if corps_py is None:
-            return None
-
-        corps_pq = krx.load_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
-        print('PQ Type' + type(corps_pq))
-        if corps_pq is None:
-            return None
-
-        corps = krx.load_corps(year, quarter)
-        print('Curr Type' + type(corps))
-        if corps is None:
-            return None
-
-        print([ob.__dict__ for ob in corps_pq[:20]])
-        if corps_py == None or corps_pq == None or corps == None:
-            # print('Insufficient past data')
-            return None
-
+    @classmethod
+    def _choice(self, corps_prev_year, corps_prev_quarter, corps, year, quarter, num):
         stocks = list(map(lambda c: c.stock, corps)) 
-        qstocks = list(map(lambda c: c.stock, corps_pq))
-        ystocks = list(map(lambda c: c.stock, corps_py)) 
+        qstocks = list(map(lambda c: c.stock, corps_prev_quarter))
+        ystocks = list(map(lambda c: c.stock, corps_prev_year)) 
 
         name  = pd.Series(list(map(lambda c: c.name,        corps)), index=stocks)
         ipbr  = pd.Series(list(map(lambda c: 1. / c.pbr(),  corps)), index=stocks)
@@ -63,10 +41,10 @@ class HQ_VM(QuantStock):
         sales = pd.Series(list(map(lambda c: c.sales,       corps)), index=stocks)
         net   = pd.Series(list(map(lambda c: c.net_income,  corps)), index=stocks)
 
-        qsale  = pd.Series(list(map(lambda c: c.sales,      corps_pq)), index=qstocks)
-        qnet   = pd.Series(list(map(lambda c: c.net_income, corps_pq)), index=qstocks)
-        ysale  = pd.Series(list(map(lambda c: c.sales,      corps_py)), index=ystocks)
-        ynet   = pd.Series(list(map(lambda c: c.net_income, corps_py)), index=ystocks)
+        qsale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_quarter)), index=qstocks)
+        qnet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_quarter)), index=qstocks)
+        ysale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_year)), index=ystocks)
+        ynet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_year)), index=ystocks)
 
         data  = pd.concat([name, ipbr, iper, ipsr, ipfcr, sales, net], axis=1)
         qdata = pd.concat([qsale, qnet], axis=1)
@@ -106,7 +84,28 @@ class HQ_VM(QuantStock):
         # print(len(corps_py))
         # print(len(corps))
         # print(vm.head(numbers).index.tolist())
-        return vm.head(numbers).index.tolist()
+        return vm.head(num).index.tolist()
+
+    def choice(self, date, numbers=20):
+        year, quarter = self.get_prev_year_and_quarter(date)
+
+        corps_py = krx.load_corps(year-1, quarter)
+        if corps_py is None:
+            return None
+
+        corps_pq = krx.load_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
+        if corps_pq is None:
+            return None
+
+        corps = krx.load_corps(year, quarter)
+        if corps is None:
+            return None
+
+        if corps_py == None or corps_pq == None or corps == None:
+            return None
+
+        return self._choice(corps_py, corps_pq, corps, year, quarter, numbers)
+        
         
 
     def backtest(self, begin):        
@@ -137,11 +136,21 @@ class HQ_VM(QuantStock):
             corps.append(corp)
 
         data = pd.DataFrame(pd.Series([0]), index=timestamp)
+        data['Growth'] = 1
+        print(data)
         
+        hold = {}
+        value = 1
         if len(timestamp) > 1:
-            for i in range(timestamp):
+            for i in range(len(timestamp)):
                 t = timestamp[i]
+                if i != 0:
+                    value = 0
+                    for c in corps[i-1]:
+                        
                 choices = corps[i]
+                for c in choices:
+                    hold[c.stock] = value / len(choices)
 
 
 
@@ -155,4 +164,4 @@ class HQ_VM(QuantStock):
 from datetime import datetime
 q = HQ_VM()
 # q.choice(datetime.strptime('20210401', '%Y%m%d'))
-q.backtest(datetime.strptime('20170401', '%Y%m%d'))
+q.backtest(datetime.strptime('20160401', '%Y%m%d'))

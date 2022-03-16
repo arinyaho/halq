@@ -200,10 +200,11 @@ def _load_data(corps, year, quarter, type, c=False):
     if type == 'BS':    _load_bs(filename, corps)
 
 
-def load_corps(year, quarter):
+def load_corps(year: int, quarter: int):
     corps = {}
     corps_invalid = {}
 
+    '''
     cache_filename = _cache_filename(year, quarter)
     try:
         if os.path.exists(cache_filename):
@@ -211,6 +212,7 @@ def load_corps(year, quarter):
                 return json.load(fin)
     except Exception as ex:
         print(ex)
+    '''
 
     try:
         # 손익계산서(연결)
@@ -261,6 +263,7 @@ def load_corps(year, quarter):
         # print(f'Invalid: {year} {quarter}Q {len(corps_invalid)}')
 
         ret = list(corps.values())
+        '''
         try:
             print(type(ret[0]))
             with open(cache_filename, 'w', encoding='utf-8') as fout:
@@ -268,7 +271,7 @@ def load_corps(year, quarter):
         except Exception as ex:
             print(traceback.format_exc())
             print(ex)
-
+        '''
         return ret
     except Exception as ex:
         print(ex)
