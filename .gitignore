@@ -2,6 +2,7 @@
 *.csv
 *.xlsx
 *.log
+*.cache
 
 stock/dart-data
 

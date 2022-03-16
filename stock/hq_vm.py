@@ -1,30 +1,55 @@
 from quant_hq import QuantStock
 import krx
-import sys
+import sys, json
+
+import datetime
 import pandas as pd
 
 class HQ_VM(QuantStock):
     @classmethod
     def get_year_and_quarter(cls, date):
         year = date.year
-        if date.month < 4:   quarter = 4
+        if date.month < 4:      quarter = 1
+        elif date.month < 7:    quarter = 2
+        elif date.month < 10:   quarter = 3
+        else: quarter = 4
+        return year, quarter
+
+    @classmethod
+    def get_prev_year_and_quarter(cls, date):
+        year = date.year
+        if date.month < 4:
+            quarter = 4
+            year -= 1
         elif date.month < 7:   quarter = 1
         elif date.month < 10:  quarter = 2
         else: quarter = 3
         return year, quarter
 
 
+
     def choice(self, date, numbers=20):
-        year, quarter = self.get_year_and_quarter(date)
+        year, quarter = self.get_prev_year_and_quarter(date)
 
-        print(year, quarter)
         corps_py = krx.load_corps(year-1, quarter)
-        corps_pq = krx.load_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
-        corps = krx.load_corps(year, quarter)
+        print('PY Type' + type(corps_pq))
+        if corps_py is None:
+            return None
 
+        corps_pq = krx.load_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
+        print('PQ Type' + type(corps_pq))
+        if corps_pq is None:
+            return None
+
+        corps = krx.load_corps(year, quarter)
+        print('Curr Type' + type(corps))
+        if corps is None:
+            return None
+
+        print([ob.__dict__ for ob in corps_pq[:20]])
         if corps_py == None or corps_pq == None or corps == None:
-            print('Insufficient past data')
-            sys.exit(1)
+            # print('Insufficient past data')
+            return None
 
         stocks = list(map(lambda c: c.stock, corps)) 
         qstocks = list(map(lambda c: c.stock, corps_pq))
@@ -72,7 +97,7 @@ class HQ_VM(QuantStock):
 
         vm['Score'] = vm[list(map(lambda x: f'{x}-ORD', columns))].mean(axis=1)
         vm = vm.sort_values(by=['Score'])
-
+        vm.index.name = 'Stock'
         # print(vm.head())
         vm.to_excel(f'hqvm-{year}-{quarter}.xlsx')
         vm.to_csv(f'hqvm-{year}-{quarter}.csv')
@@ -83,14 +108,51 @@ class HQ_VM(QuantStock):
         # print(vm.head(numbers).index.tolist())
         return vm.head(numbers).index.tolist()
         
-    def backtest(self, begin):
+
+    def backtest(self, begin):        
         begin_year, begin_quarter = self.get_year_and_quarter(begin)
-        pass
+        end_year, end_quarter = self.get_prev_year_and_quarter(datetime.now())
+
+        corps = None
+        year = begin_year
+        quarter = begin_quarter
+
+        timestamp = []
+        corps = []
+        while year * 10 + quarter < end_year * 10 + end_quarter:
+            dt = datetime(year=year, month=(quarter-1)*3+1, day=1)            
+            print(f'Checking {year}-{quarter}Q, {dt.strftime("%Y-%m-%d")}')
+            corp = self.choice(dt)
+            corp = krx.load_corps(year, quarter)            
+
+            quarter += 1
+            if quarter == 5:
+                quarter = 1
+                year += 1
+
+            if corp is None:
+                continue
+            
+            timestamp.append((year, quarter))
+            corps.append(corp)
+
+        data = pd.DataFrame(pd.Series([0]), index=timestamp)
+        
+        if len(timestamp) > 1:
+            for i in range(timestamp):
+                t = timestamp[i]
+                choices = corps[i]
+
+
+
+        
+        
 
         
 
-
+        
 
 from datetime import datetime
 q = HQ_VM()
-q.choice(datetime.strptime('20210401', '%Y%m%d'))
+# q.choice(datetime.strptime('20210401', '%Y%m%d'))
+q.backtest(datetime.strptime('20170401', '%Y%m%d'))

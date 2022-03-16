@@ -1,5 +1,5 @@
 from corp import Market, Corp
-import re, json
+import re, json, os, traceback
 
 
 # http://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0201020101
@@ -45,7 +45,7 @@ def _load_pl(filename, corps):
     # Sales, Net-Income
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:        
         fields = fin.readline().split('\t')
-        print(f'Reading {filename}, fields: {len(fields)}')
+        # print(f'Reading {filename}, fields: {len(fields)}')
         value_index = 12
         if len(fields[12].strip()) == 0:
             value_index = 13                
@@ -87,7 +87,7 @@ def _load_pl(filename, corps):
 def _load_cf(filename, corps):
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:    
         fields = fin.readline().split('\t')
-        print(f'Reading {filename}, fields: {len(fields)}')
+        # print(f'Reading {filename}, fields: {len(fields)}')
         value_index = 12
         if len(fields[12].strip()) == 0:
             value_index = 13     
@@ -132,7 +132,7 @@ def _load_cf(filename, corps):
 def _load_bs(filename, corps):        
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:    
         fields = fin.readline().split('\t')
-        print(f'Reading {filename}, fields: {len(fields)}')
+        # print(f'Reading {filename}, fields: {len(fields)}')
         value_index = 12
         if len(fields[12].strip()) == 0:
             value_index = 13        
@@ -167,7 +167,7 @@ def _load_bs(filename, corps):
 
 def _load_shares(filename, corps):
     with open('dart-data/' + filename, 'r', encoding='utf-8') as fin:    
-        print(f'Reading {filename}')        
+        # print(f'Reading {filename}')        
         for line in fin:
             data = line.split(',')
             stock = data[0].strip().replace('"', '')
@@ -187,6 +187,10 @@ def _load_shares(filename, corps):
                 print('Invalid', filename, c.name, data)
                 continue
 
+def _cache_filename(year, quarter):
+    return f'{year}-{quarter}Q.cache'
+
+
 def _load_data(corps, year, quarter, type, c=False):
     cs = '-c' if c else ''
     filename = f'{year}-{quarter}Q-{type}{cs}.txt'
@@ -195,9 +199,18 @@ def _load_data(corps, year, quarter, type, c=False):
     if type == 'CF':    _load_cf(filename, corps)
     if type == 'BS':    _load_bs(filename, corps)
 
+
 def load_corps(year, quarter):
     corps = {}
     corps_invalid = {}
+
+    cache_filename = _cache_filename(year, quarter)
+    try:
+        if os.path.exists(cache_filename):
+            with open(cache_filename, 'r', encoding='utf-8') as fin:
+                return json.load(fin)
+    except Exception as ex:
+        print(ex)
 
     try:
         # 손익계산서(연결)
@@ -245,11 +258,21 @@ def load_corps(year, quarter):
 
         for stock in corps_invalid:
             del corps[stock]
-        print(f'Invalid: {year} {quarter}Q {len(corps_invalid)}')
-        
-        return corps.values()
+        # print(f'Invalid: {year} {quarter}Q {len(corps_invalid)}')
+
+        ret = list(corps.values())
+        try:
+            print(type(ret[0]))
+            with open(cache_filename, 'w', encoding='utf-8') as fout:
+                json.dump([ob.__dict__ for ob in ret], fout, ensure_ascii=False)
+        except Exception as ex:
+            print(traceback.format_exc())
+            print(ex)
+
+        return ret
     except Exception as ex:
         print(ex)
+        # print(traceback.format_exc())
         return None
 
 

@@ -24,11 +24,17 @@ class Corp:
 
 
     def per(self):
-        return self.price * self.shares / self.net_income
+        try:
+            return self.price * self.shares / self.net_income
+        except ZeroDivisionError:
+            return float('inf')
 
     
     def pbr(self):
-        return self.price * self.shares / (self.assets - self.liabilities)
+        try:
+            return self.price * self.shares / (self.assets - self.liabilities)
+        except ZeroDivisionError:
+            return float('inf')
     
 
     def psr(self):
@@ -43,5 +49,8 @@ class Corp:
 
     
     def pfcr(self):
-        return self.price * self.shares / self.fcf()
+        try:
+            return self.price * self.shares / self.fcf()
+        except ZeroDivisionError:
+            return float('inf')
    
