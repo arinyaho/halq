@@ -86,6 +86,7 @@ class HQ_VM(QuantStock):
         # print(vm.head(numbers).index.tolist())
         return vm.head(num).index.tolist()
 
+
     def choice(self, date, numbers=20):
         year, quarter = self.get_prev_year_and_quarter(date)
 

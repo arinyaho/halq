@@ -15,6 +15,7 @@ _dart_code_net_income2 = 'ifrs-full_ProfitLoss'
 # 영업이익
 _dart_code_profit1 = 'dart_OperatingIncomeLoss'
 
+
 # 자산총계
 _dart_code_assets1 = 'ifrs_Assets'
 _dart_code_assets2 = 'ifrs-full_Assets'
