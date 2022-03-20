@@ -16,7 +16,7 @@ class QuantStock:
     # Get Pandas DataFrame of backtest data
     # containing column 'Growth' begining from 1 and 'MDD'
     @abstractmethod
-    def backtest(self, begin, end):
+    def backtest(self, begin, num=20):
         pass
 
     @classmethod

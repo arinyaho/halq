@@ -54,3 +54,6 @@ class Corp:
         except ZeroDivisionError:
             return float('inf')
    
+   
+    def has_full_data(self):
+        return all(map(lambda v: v is not None, self.__dict__.values()))
