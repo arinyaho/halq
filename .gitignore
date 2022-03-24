@@ -4,6 +4,7 @@
 *.log
 *.cache
 *.ipynb
+*.db
 
 .vscode
 
