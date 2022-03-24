@@ -5,8 +5,8 @@ import pandas as pd
 
 
 class QuantStock:
-    def __init__(self):
-        pass
+    def __init__(self, name):
+        self.name = name
 
     # Print choices
     @abstractmethod

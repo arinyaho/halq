@@ -3,3 +3,4 @@ pandas-datareader
 yfinance
 fredapi
 openpyxl
+requests

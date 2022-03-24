@@ -1,44 +1,42 @@
 import sqlite3
-from typing import Dict
-from corp import Corp
+import requests
+import os
 
-def load_corps(year: int, quarter: int) -> Dict[str, Corp]:
-    sqlite_filename = 'krx.db'
-    conn = sqlite3.connect(sqlite_filename)
-    conn.row_factory = sqlite3.Row
 
-    cursor = conn.cursor()
-    sql = f'SELECT * FROM fin WHERE year={year} AND quarter={quarter}'
+_db_url = 'https://github.com/arinyaho/fin-data/raw/main/krx.db'
+_db_path = 'krx.db'
+_tbl_name = 'krx'
+
+
+class KRX:    
+    def __init__(self):
+        if not os.path.exists(_db_path):
+            self.__download_db()
+        self.conn = sqlite3.connect(_db_path)
+        self.cursor = self.conn.cursor()
+
+
+    def __download_db(self):
+        with open(_db_path, "wb") as fout:
+            file = requests.get(_db_url, stream = True)
+            for chunk in file.iter_content(chunk_size=1024):  
+                if chunk:
+                    fout.write(chunk)
+
+
+    def get_corps(self, year: int, quarter: int):
+        if quarter < 1 or quarter > 4:
+            return None
+        
+        sql = f'SELECT * FROM {_tbl_name} WHERE year={year} AND quarter={quarter}'
+        self.cursor.execute(sql)
+        return self.cursor.fetchall()
+        
+
+        
+        
+        
+        
     
-    corps = {}
-    for row in cursor.execute(sql):
-        corp = Corp(row['name'], row['stock'], row['market'])
-        corp.sales = row['sales']
-        corp.net_income = row['net_income']
-        corp.profit = row['profit']
-        corp.cash_flow = row['cash_flow']
-        corp.assets = row['assets']
-        corp.liabilities = row['liabilities']
-        corp.price = row['price']
-        corp.shares = row['shares']
-        corp.capex = row['capex']
-        corps[corp.stock] = corp
 
-    cursor.close()
-    conn.close()
-    return corps if len(corps) > 0 else None
-
-
-if __name__ == '__main__':
-    for year in range(2016, 2021):
-        for quarter in range(1, 5):
-            corps = load_corps(year, quarter)
-            print(year, quarter, len(corps))
-            print()
-    
-    year = 2021
-    for quarter in range(1, 4):
-        corps = load_corps(year, quarter)
-        print(year, quarter, len(corps))
-        print()
- 
+        

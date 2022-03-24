@@ -1,12 +1,13 @@
 from quant_hq import QuantStock
 from datetime import datetime
-import krx
-import sys, json
 import pandas as pd
 import numpy as np
 
 
 class HQ_VM(QuantStock):
+    def __init__(self):
+        QuantStock.__init__(self, 'Haltoo Value-Momentum')
+
     @classmethod
     def get_year_and_quarter(cls, date):
         year = date.year
