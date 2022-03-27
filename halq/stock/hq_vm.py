@@ -1,15 +1,19 @@
-from quant_hq import QuantStock
+from typing import List
 from datetime import datetime
 import pandas as pd
 import numpy as np
 
+from .corp import Corp
+from .krx import KRX_Reader
+from .quant_hq import QuantStock
 
 class HQ_VM(QuantStock):
     def __init__(self):
         QuantStock.__init__(self, 'Haltoo Value-Momentum')
 
+
     @classmethod
-    def get_year_and_quarter(cls, date):
+    def get_year_and_quarter(cls, date: datetime):
         year = date.year
         if date.month < 4:      quarter = 1
         elif date.month < 7:    quarter = 2
@@ -17,24 +21,25 @@ class HQ_VM(QuantStock):
         else: quarter = 4
         return year, quarter
 
+
     @classmethod
-    def get_prev_year_and_quarter(cls, date):
-        year = date.year
-        if date.month < 4:
+    def get_prev_year_and_quarter(cls, date: datetime):
+        year, quarter = cls.get_year_and_quarter(date)
+        if quarter == 1:
             quarter = 4
             year -= 1
-        elif date.month < 7:   quarter = 1
-        elif date.month < 10:  quarter = 2
-        else: quarter = 3
+        else:
+            quarter -= 1
         return year, quarter
 
 
     @classmethod
-    def _choice(self, corps_prev_year, corps_prev_quarter, corps, year, quarter, num):
+    def _choice(self, corps_prev_year: List[Corp], corps_prev_quarter: List[Corp], corps: List[Corp], year: int, quarter: int, num: int):
         stocks = list(map(lambda c: c.stock, corps))
         qstocks = list(map(lambda c: c.stock, corps_prev_quarter))
         ystocks = list(map(lambda c: c.stock, corps_prev_year)) 
 
+        '''
         name  = pd.Series(list(map(lambda c: c.name,        corps)), index=stocks, dtype=str)
         ipbr  = pd.Series(list(map(lambda c: 1. / c.pbr(),  corps)), index=stocks, dtype=np.float64)
         iper  = pd.Series(list(map(lambda c: 1. / c.per(),  corps)), index=stocks, dtype=np.float64)
@@ -42,28 +47,41 @@ class HQ_VM(QuantStock):
         ipfcr = pd.Series(list(map(lambda c: 1. / c.pfcr(), corps)), index=stocks, dtype=np.float64)
         sales = pd.Series(list(map(lambda c: c.sales,       corps)), index=stocks, dtype=np.int64)
         net   = pd.Series(list(map(lambda c: c.net_income,  corps)), index=stocks, dtype=np.int64)
+        '''
 
-        qsale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_quarter)), index=qstocks, dtype=np.int64)
-        qnet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_quarter)), index=qstocks, dtype=np.int64)
-        ysale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_year)),    index=ystocks, dtype=np.int64)
-        ynet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_year)),    index=ystocks, dtype=np.int64)
+        data = pd.DataFrame([c.__dict__ for c in corps])
+  
+        qsale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_quarter)), index=qstocks, dtype='Int64', name='Q-SALES')
+        qnet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_quarter)), index=qstocks, dtype='Int64', name='Q-NET')
+        ysale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_year)),    index=ystocks, dtype='Int64', name='Y-SALES')
+        ynet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_year)),    index=ystocks, dtype='Int64', name='Y-NET')
 
-        data  = pd.concat([name, ipbr, iper, ipsr, ipfcr, sales, net], axis=1)
-        qdata = pd.concat([qsale, qnet], axis=1)
-        ydata = pd.concat([ysale, ynet], axis=1)
+        # data  = pd.concat([name, ipbr, iper, ipsr, ipfcr, sales, net], axis=1)
+        # qdata = pd.concat([qsale, qnet], axis=1)
+        # ydata = pd.concat([ysale, ynet], axis=1)
 
-        data.columns  = ['Name', 'IPBR', 'IPER', 'IPSR', 'IPFCR', 'SALES', 'NET']
-        qdata.columns = ['Q-SALES', 'Q-NET']
-        ydata.columns = ['Y-SALES', 'Y-NET']
+        #data.columns  = ['Name', 'IPBR', 'IPER', 'IPSR', 'IPFCR', 'SALES', 'NET']
+        #qdata.columns = ['Q-SALES', 'Q-NET']
+        #ydata.columns = ['Y-SALES', 'Y-NET']
+        data = data.merge(qsale, how='outer', left_index=True, right_index=True)
+        data = data.merge(qnet,  how='outer', left_index=True, right_index=True)
+        data = data.merge(ysale, how='outer', left_index=True, right_index=True)
+        data = data.merge(ynet,  how='outer', left_index=True, right_index=True)
                 
-        vm = data.merge(qdata, how="outer", left_index=True, right_index=True).dropna()
-        vm = vm.merge(ydata, how="outer", left_index=True, right_index=True).dropna()
-        vm['Q-SALES-GROWTH'] = vm['SALES'] / vm['Q-SALES'] - 1
-        vm['Y-SALES-GROWTH'] = vm['SALES'] / vm['Y-SALES'] - 1
-        vm['Q-NET-GROWTH'] = vm['NET'] / vm['Q-NET'] - 1
-        vm['Y-NET-GROWTH'] = vm['NET'] / vm['Y-NET'] - 1
+        #vm = data.merge(qdata, how="outer", left_index=True, right_index=True).dropna()
+        #vm = vm.merge(ydata, how="outer", left_index=True, right_index=True).dropna()
 
-        columns = ['IPBR', 'IPER', 'IPSR', 'IPFCR', 'Q-SALES-GROWTH', 'Y-SALES-GROWTH', 'Q-NET-GROWTH', 'Y-NET-GROWTH']
+        columns = [
+            'ipbr', 
+            'iper', 
+            'ipsr', 
+            'ipfcr', 
+            'profit_growth_qoq', 
+            'profit_growth_yoy',
+            'net_income_growth_qoq', 
+            'net_income_growth_yoy']
+        
+        data = data.dropna()
         
         # print(len(vm))
         # print(vm.tail())
@@ -92,18 +110,19 @@ class HQ_VM(QuantStock):
         return list(map(lambda s: corps_map[s], stocks))
 
 
-    def choice(self, date, numbers=20):
+    def choice(self, date: datetime, numbers: int = 20):
         year, quarter = self.get_prev_year_and_quarter(date)
 
-        corps_py = krx.load_corps(year-1, quarter)
+        reader = KRX_Reader()
+        corps_py = reader.get_corps(year-1, quarter)
         if corps_py is None:
             return None
 
-        corps_pq = krx.load_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
+        corps_pq = reader.get_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
         if corps_pq is None:
             return None
 
-        corps = krx.load_corps(year, quarter)
+        corps = reader.get_corps(year, quarter)
         if corps is None:
             return None
 
@@ -121,6 +140,8 @@ class HQ_VM(QuantStock):
         year = begin_year
         quarter = begin_quarter
 
+        reader = KRX_Reader()
+
         timestamp = []
         corps_all_dict = []
         corps_all_list = []
@@ -129,7 +150,7 @@ class HQ_VM(QuantStock):
             # print(f'Checking {year}-{quarter}Q, {dt.strftime("%Y-%m-%d")}')            
 
             t = (year, quarter)
-            c = krx.load_corps(year, quarter)            
+            c = reader.get_corps(year, quarter)            
 
             quarter += 1
             if quarter == 5:
@@ -208,7 +229,8 @@ class HQ_VM(QuantStock):
 
 
 
-q = HQ_VM()
-# q.choice(datetime.strptime('20210401', '%Y%m%d'))
-d = q.backtest(datetime.strptime('20100401', '%Y%m%d'), halloween=False)
-print(d)
+# q = HQ_VM()
+# chocies = q.choice(datetime.strptime('20210401', '%Y%m%d'))
+# print(len(choices))
+#d = q.backtest(datetime.strptime('20100401', '%Y%m%d'), halloween=False)
+#print(d)
