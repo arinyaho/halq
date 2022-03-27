@@ -5,6 +5,7 @@
 *.cache
 *.ipynb
 *.db
+test.py
 
 .vscode
 
