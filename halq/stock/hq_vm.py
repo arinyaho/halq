@@ -50,7 +50,7 @@ class HQ_VM(QuantStock):
         '''
 
         data = pd.DataFrame([c.__dict__ for c in corps], index=stocks)
-        data.drop(['stock'], axis=1)
+        data = data.drop(['stock'], axis=1)
         data.index.name = 'stock'
   
         # qsale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_quarter)), index=qstocks, dtype='Int64', name='Q-SALES')
