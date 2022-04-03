@@ -3,9 +3,9 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from .corp import Corp
-from .krx import KRX_Reader
-from .quant_hq import QuantStock
+from halq.stock.corp import Corp
+from halq.stock.krx import KRX_Reader
+from halq.stock.quant_hq import QuantStock
 
 class HQ_VM(QuantStock):
     def __init__(self):
@@ -36,75 +36,32 @@ class HQ_VM(QuantStock):
     @classmethod
     def _choice(self, corps: List[Corp], year: int, quarter: int, num: int):
         stocks = list(map(lambda c: c.stock, corps))
-        # qstocks = list(map(lambda c: c.stock, corps_prev_quarter))
-        # ystocks = list(map(lambda c: c.stock, corps_prev_year)) 
-
-        '''
-        name  = pd.Series(list(map(lambda c: c.name,        corps)), index=stocks, dtype=str)
-        ipbr  = pd.Series(list(map(lambda c: 1. / c.pbr(),  corps)), index=stocks, dtype=np.float64)
-        iper  = pd.Series(list(map(lambda c: 1. / c.per(),  corps)), index=stocks, dtype=np.float64)
-        ipsr  = pd.Series(list(map(lambda c: 1. / c.psr(),  corps)), index=stocks, dtype=np.float64)
-        ipfcr = pd.Series(list(map(lambda c: 1. / c.pfcr(), corps)), index=stocks, dtype=np.float64)
-        sales = pd.Series(list(map(lambda c: c.sales,       corps)), index=stocks, dtype=np.int64)
-        net   = pd.Series(list(map(lambda c: c.net_income,  corps)), index=stocks, dtype=np.int64)
-        '''
 
         data = pd.DataFrame([c.__dict__ for c in corps], index=stocks)
         data = data.drop(['stock'], axis=1)
         data.index.name = 'stock'
-  
-        # qsale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_quarter)), index=qstocks, dtype='Int64', name='Q-SALES')
-        # qnet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_quarter)), index=qstocks, dtype='Int64', name='Q-NET')
-        # ysale  = pd.Series(list(map(lambda c: c.sales,      corps_prev_year)),    index=ystocks, dtype='Int64', name='Y-SALES')
-        # ynet   = pd.Series(list(map(lambda c: c.net_income, corps_prev_year)),    index=ystocks, dtype='Int64', name='Y-NET')
 
-        # data  = pd.concat([name, ipbr, iper, ipsr, ipfcr, sales, net], axis=1)
-        # qdata = pd.concat([qsale, qnet], axis=1)
-        # ydata = pd.concat([ysale, ynet], axis=1)
-
-        #data.columns  = ['Name', 'IPBR', 'IPER', 'IPSR', 'IPFCR', 'SALES', 'NET']
-        #qdata.columns = ['Q-SALES', 'Q-NET']
-        #ydata.columns = ['Y-SALES', 'Y-NET']
-        # data = data.merge(qsale, how='outer', left_index=True, right_index=True)
-        # data = data.merge(qnet,  how='outer', left_index=True, right_index=True)
-        # data = data.merge(ysale, how='outer', left_index=True, right_index=True)
-        # data = data.merge(ynet,  how='outer', left_index=True, right_index=True)
-                
-        #vm = data.merge(qdata, how="outer", left_index=True, right_index=True).dropna()
-        #vm = vm.merge(ydata, how="outer", left_index=True, right_index=True).dropna()
-
-        columns = [
-            'ipbr', 
-            'iper', 
-            'ipsr', 
-            'ipfcr', 
-            'profit_growth_qoq', 
-            'profit_growth_yoy',
-            'net_income_growth_qoq', 
-            'net_income_growth_yoy']
+        columns = {
+            'ord_ipbr': 'int64', 
+            'ord_iper': 'int64', 
+            'ord_ipsr': 'int64', 
+            'ord_ipfcr': 'int64', 
+            'ord_profit_growth_qoq': 'int64',  
+            'ord_profit_growth_yoy': 'int64', 
+            'ord_net_income_growth_qoq': 'int64', 
+            'ord_net_income_growth_yoy': 'int64'
+        }
         
-        data.to_csv('test.csv')
-        data = data.dropna()
-        
-        # print(len(vm))
-        # print(vm.tail())
-        for col in columns:        
-            data = data.sort_values(by=[col], ascending=False)
-            data[f'{col}-ORD'] = 0
-            for i in range(len(data)):
-                data.loc[data.index[i], f'{col}-ORD'] = i + 1
-
-        data['Score'] = data[list(map(lambda x: f'{x}-ORD', columns))].mean(axis=1)
-        data = data.sort_values(by=['Score'])
+        # data['score'] = data[list(map(lambda x: f'{x}', columns.keys()))].mean(axis=1)
+        data = data.astype(columns)
+        data['score'] = 0
+        for k in columns.keys():
+            data['score'] += data[k]
+        data['score'] /= 8
+        data = data.sort_values(by=['score'])
         data.index.name = 'Stock'
-        # print(vm.head())
-        # vm.to_excel(f'hqvm-{year}-{quarter}.xlsx')
-        # vm.to_csv(f'hqvm-{year}-{quarter}.csv')
+        data.to_csv('test.csv')
 
-        # print(len(corps_pq))
-        # print(len(corps_py))
-        # print(len(corps))
-        # print(vm.head(numbers).index.tolist())
         corps_map = {}
         for c in corps:
             corps_map[c.stock] = c
@@ -113,9 +70,7 @@ class HQ_VM(QuantStock):
         return list(map(lambda s: corps_map[s], stocks))
 
 
-    def choice(self, date: datetime, numbers: int = 20):
-        year, quarter = self.get_prev_year_and_quarter(date)
-
+    def choice(self, year: int, quarter: int, numbers: int = 20):
         reader = KRX_Reader()
         corps_py = reader.get_corps(year-1, quarter)
         if corps_py is None:

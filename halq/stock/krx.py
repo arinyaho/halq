@@ -3,11 +3,11 @@ import requests
 import os
 from typing import List, Dict
 
-from .corp import Corp
+from halq.stock.corp import Corp
 
 
-_db_url = 'https://github.com/arinyaho/fin-data/raw/main/krx.db'
-_db_path = 'krx.db'
+_db_url = 'https://github.com/arinyaho/fin-data/raw/main/halq.db'
+_db_path = 'halq.db'
 _tbl_name = 'krx'
 
 
