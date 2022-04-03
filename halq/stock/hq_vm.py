@@ -34,7 +34,7 @@ class HQ_VM(QuantStock):
 
 
     @classmethod
-    def _choice(self, corps: List[Corp], year: int, quarter: int, num: int):
+    def _choice(self, corps: List[Corp], num: int):
         stocks = list(map(lambda c: c.stock, corps))
 
         data = pd.DataFrame([c.__dict__ for c in corps], index=stocks)
@@ -70,24 +70,26 @@ class HQ_VM(QuantStock):
         return list(map(lambda s: corps_map[s], stocks))
 
 
-    def choice(self, year: int, quarter: int, numbers: int = 20):
+    def choice(self, year: int, quarter: int, decile: int = 0, numbers: int = 20):
         reader = KRX_Reader()
-        corps_py = reader.get_corps(year-1, quarter)
-        if corps_py is None:
-            return None
-
-        corps_pq = reader.get_corps(year-1 if quarter == 1 else year, 4 if quarter == 1 else quarter-1)
-        if corps_pq is None:
-            return None
-
+        
         corps = reader.get_corps(year, quarter)
         if corps is None:
             return None
 
-        if corps_py == None or corps_pq == None or corps == None:
-            return None
+        corps = list(filter(lambda c: c.market_cap is not None, corps))
 
-        return self._choice(corps, year, quarter, numbers)
+        if decile != 0:
+            corps.sort(key=lambda c: c.market_cap)
+            decile_size = len(corps) // 10
+            start_offset = decile_size * (decile - 1)
+            if decile == 10:
+                end_offset = len(corps)
+            else:
+                end_offset = start_offset + decile_size
+            corps = corps[start_offset:end_offset]
+        
+        return self._choice(corps, numbers)
         
         
 

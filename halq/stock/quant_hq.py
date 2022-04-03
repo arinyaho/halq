@@ -9,7 +9,7 @@ class QuantStock:
 
     # Print choices
     @abstractmethod
-    def choice(self, date, numbers=20):
+    def choice(self, year, quarter, decile=0, numbers=20):
         pass
     
     # Get Pandas DataFrame of backtest data
