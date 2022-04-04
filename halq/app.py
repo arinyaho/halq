@@ -5,9 +5,8 @@ from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
 from fredapi import Fred
 
-from etf.vaa_a import VAA_A
-from etf.laa import LAA
-from etf.dm import DualMomentum
+from halq.etf import MA, VAA_A, LAA, DualMomentum
+
 
 import abc
 import argparse
@@ -19,10 +18,10 @@ from datetime import datetime, timedelta
 yf.pdr_override()
 
 
-def dispaly_figure(data, title):
+def dispaly_figure(data, title, cols=[]):
     capr = plt.figure(1)
-    capr.suptitle(f"{title} Growth")    
-    data['Growth'].plot.line()
+    capr.suptitle(f"{title} Growth")
+    data['value'].plot.line()
 
     mdd = plt.figure(2)
     mdd.suptitle(f"{title} MDD")
@@ -52,24 +51,12 @@ def parse():
     return args
 
 
-def hq_ultra():
-    if not os.path.exists('dart.api'):
-        print('DART API Key file not found: dart.api')
-        sys.exit(1)
-
-    with open('dart.api', 'r') as fin:
-        apikey = fin.read()
-    
-    print(apikey)
-    dart.set_api_key(api_key=apikey)
-    clist = dart.get_corp_list()
-    print(clist)
-
 def list_strategies():
     print('List of Strategies')
     print('  laa       Lethargic Asset Allocation')
     print('  vaa-a     Vigilant Asset Allocation Aggresive')
     print('  dmo       Original Dual Momentum')
+    print('  ma        Moving Average')
 
 
 def main():
@@ -83,7 +70,8 @@ def main():
     clsdic = {
         'dm': DualMomentum,
         'laa': LAA,
-        'vaa-a': VAA_A
+        'vaa-a': VAA_A,
+        'ma': MA
     }
 
     sfullname = {
@@ -106,19 +94,30 @@ def main():
         q = clsdic[sname]()
         if args.backtest:
             b = datetime.strptime(args.begin, '%Y%m%d')
-            e = datetime.strptime(args.end, '%Y%m%d')            
+            e = datetime.strptime(args.end, '%Y%m%d')
+            if sname.lower() == 'ma':
+                pass
+            
             data = q.backtest(b, e, seed=args.seed, monthly_installment=args.installment, rebalance_month=args.rebalance_month)
             days = (e - b).days
-            growth = data['Growth'][-1]
-            print('Start: %s' % data.index[0].strftime('%Y-%m-%d'))
-            print('End  : %s' % data.index[-1].strftime('%Y-%m-%d'))
-            print('CAPR: %.3f' % (((growth ** (1. / (days / 365)) - 1)) * 100))
-            print('MDD: %.3f' % (data['dd'].min() * 100))
 
-            # print(data.tail())
+            growth = data['value'][-1] / data['value'][0]
+            cagr = math.pow(growth, 1 / (days/365)) - 1
+
+            if args.seed != 1:
+                print(f'Period : {days} days')
+                print(f'Seed   : {args.seed}')
+                print(f'Profit : {(data["value"][-1] - data["value"][0])}')
+
+            print('Start : %s' % data.index[0].strftime('%Y-%m-%d'))
+            print('End   : %s' % data.index[-1].strftime('%Y-%m-%d'))
+            print(f'Growth: {growth:.3f}')
+            print('CAGR  : %.3f' % (cagr))
+            print('MDD   : %.3f' % (data['dd'].min() * 100))
+
             data.to_excel(f'{sname}.xlsx')
             data.to_csv(f'{sname}.csv')
-            dispaly_figure(data, sfullname[sname])
+            dispaly_figure(data, q.name, cols=['ma_top', 'ma_bottom'])
         else:
             date = datetime.now() if args.date is None else datetime.strptime(args.date, '%Y%m%d')
             q.rebalance(date)

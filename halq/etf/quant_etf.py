@@ -30,7 +30,7 @@ class QuantETF:
         pass
 
     @classmethod
-    def add_dd(cls, data) -> pd.DataFrame:
-        data['dd'] = -1 * (data['Growth'].cummax() - data['Growth']) / data['Growth'].cummax()    
+    def add_dd(cls, data, col='Growth') -> pd.DataFrame:
+        data['dd'] = -1 * (data[col].cummax() - data[col]) / data[col].cummax()    
         return data
 
